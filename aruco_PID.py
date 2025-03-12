@@ -77,6 +77,9 @@ class ArucoPIDController(Node):
                 # cv2.putText(frame, f"X: {x:.3f}m, Y: {y:.3f}m, Z: {z:.3f}m", 
                 #             text_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
+                # 在控制台上打印座標
+                print(f"Marker ID: {marker_id}, X: {x:.3f}m, Y: {y:.3f}m, Z: {z:.3f}m")
+
         return positions.get(self.robot_id, None), positions.get(self.target_id, None), frame
 
     def compute_control(self, robot_pos, target_pos):
