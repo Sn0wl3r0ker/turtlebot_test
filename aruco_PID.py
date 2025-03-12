@@ -90,10 +90,10 @@ class ArucoPIDController(Node):
         robot_x, robot_y, robot_z = robot_pos
         target_x, target_y, target_z = target_pos
 
-        # 設定 TurtleBot3 的前進方向為 Y 軸
-        err_dis = target_y - robot_y  
+        # **TurtleBot3 以 Y 軸為前進方向**
+        err_dis = target_y - robot_y  # Y 軸方向為前進方向
 
-        # 計算角度誤差
+        # **計算角度誤差**
         target_angle = math.atan2(target_y - robot_y, target_x - robot_x)
         err_theta = target_angle
 
@@ -107,25 +107,30 @@ class ArucoPIDController(Node):
         self.prev_err_dis = err_dis
         self.prev_err_theta = err_theta
 
-        # 計算速度輸出
-        max_angular_change = 0.2  # 限制每次角速度變化不超過 0.2
-
-# 限制角速度變化率
-        angular_speed = max(min(angular_speed, self.prev_err_theta + max_angular_change), self.prev_err_theta - max_angular_change)
-        # angular_speed = (self.Kp_angular * err_theta) + (self.Ki_angular * self.integral_theta) + (self.Kd_angular * derivative_theta)
-        print(f"🔄 角度誤差: {err_theta:.3f} rad, 原始 angular.z: {angular_speed:.3f}")
-
         # **確保機器人先轉向目標，再前進**
-        if abs(err_theta) > 0.1:  # 若角度誤差大於 0.1，優先轉向
+        angular_speed = (self.Kp_angular * err_theta) + (self.Ki_angular * self.integral_theta) + (self.Kd_angular * derivative_theta)
+
+        # 限制角速度變化率
+        max_angular_change = 0.2
+        angular_speed = max(min(angular_speed, self.prev_err_theta + max_angular_change), self.prev_err_theta - max_angular_change)
+
+        # 限制最大角速度
+        angular_speed = max(min(angular_speed, 1.0), -1.0)
+
+        # **DEBUG: 顯示角速度變化**
+        print(f"🔄 角度誤差: {err_theta:.3f} rad, angular.z: {angular_speed:.3f}")
+
+        # **修正 `angular_speed` 未初始化的問題**
+        if abs(err_theta) > 0.1:  # 若角度誤差大於 0.1，先轉向
             linear_speed = 0.0
         else:
             linear_speed = (self.Kp_linear * err_dis) + (self.Ki_linear * self.integral_dis) + (self.Kd_linear * derivative_dis)
 
-        # 限制速度範圍
+        # 限制線速度範圍
         linear_speed = max(min(linear_speed, 0.2), -0.2)
-        angular_speed = max(min(angular_speed, 1.0), -1.0)  # 最終仍限制最大範圍
 
         return linear_speed, angular_speed
+
 
     def control_loop(self):
         """ 主要控制迴圈 """
