@@ -139,6 +139,9 @@ class ArucoPIDController(Node):
 
         linear_speed, angular_speed = control_output
 
+        # **Print 傳送的速度數據**
+        print(f"📢 發送給 /cmd_vel -> linear.x: {linear_speed:.3f}, angular.z: {angular_speed:.3f}")
+
         # 發送控制訊號
         cmd = Twist()
         cmd.linear.x = linear_speed
@@ -150,6 +153,7 @@ class ArucoPIDController(Node):
             cmd = Twist()  # 停止機器人
         
         self.cmd_pub.publish(cmd)
+
 
 def main(args=None):
     rclpy.init(args=args)
