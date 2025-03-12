@@ -4,7 +4,6 @@ from geometry_msgs.msg import Twist
 import cv2
 import numpy as np
 import math
-import time
 from cv2 import aruco
 
 class ArucoPIDController(Node):
@@ -16,13 +15,13 @@ class ArucoPIDController(Node):
         self.timer = self.create_timer(0.15, self.control_loop)  # 每 0.15 秒執行一次
 
         # PID 參數
-        self.Kp_linear = 0.2
-        self.Ki_linear = 0.0001
+        self.Kp_linear = 0.5
+        self.Ki_linear = 0.001
         self.Kd_linear = 0.01
 
-        self.Kp_angular = 0.1
-        self.Ki_angular = 0.00001
-        self.Kd_angular = 0.005
+        self.Kp_angular = 0.5
+        self.Ki_angular = 0.0001
+        self.Kd_angular = 0.01
 
         self.prev_err_dis = 0.0
         self.prev_err_theta = 0.0
@@ -47,12 +46,8 @@ class ArucoPIDController(Node):
                                        [0.0, 0.0, 1.0]])
         self.dist_coeffs = np.array([0.01736, -0.076006, 0.002602, 0.000286, 0.0])
 
-        # 設定倒數計時（秒）
-        self.start_time = time.time()
-        self.countdown = 30  # 30 秒後停止機器人
-
     def detect_aruco(self):
-        """ 偵測 ArUco 標記，並顯示 ID、3D 坐標（X, Y, Z） """
+        """ 偵測 ArUco 標記並顯示 ID、3D 坐標（X, Y, Z） """
         ret, frame = self.cap.read()
         if not ret:
             return None, None, None
@@ -83,9 +78,6 @@ class ArucoPIDController(Node):
                             (int(c[:, 0].mean()), int(c[:, 1].mean()) + 20), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
-                # 在影像上繪製 3D 坐標軸
-                aruco.drawAxis(frame, self.camera_matrix, self.dist_coeffs, rvec, tvec, self.marker_length * 0.5)
-
                 positions[marker_id] = (x, y, z)
 
         return positions.get(self.robot_id, None), positions.get(self.target_id, None), frame
@@ -98,10 +90,11 @@ class ArucoPIDController(Node):
         robot_x, robot_y, robot_z = robot_pos
         target_x, target_y, target_z = target_pos
 
-        # 計算位置誤差
-        err_dis = math.sqrt((target_x - robot_x) ** 2 + (target_y - robot_y) ** 2)
+        # 設定 TurtleBot3 正前方方向（選擇 X 軸或 Y 軸）
+        # 這裡假設機器人前方是 Z 軸，因此主要考慮 X 軸方向
+        err_dis = target_x - robot_x  # 以 X 軸作為前進方向
 
-        # 計算角度誤差
+        # 計算角度誤差（機器人轉向目標標記）
         target_angle = math.atan2(target_y - robot_y, target_x - robot_x)
         err_theta = target_angle
 
@@ -142,17 +135,16 @@ class ArucoPIDController(Node):
 
         linear_speed, angular_speed = control_output
 
-        # 倒數計時
-        elapsed_time = time.time() - self.start_time
-        if elapsed_time >= self.countdown:
-            print("⏳ 倒數結束，停止機器人")
-            self.cmd_pub.publish(Twist())  # 停止機器人
-            return
-
         # 發送控制訊號
         cmd = Twist()
         cmd.linear.x = linear_speed
         cmd.angular.z = angular_speed
+
+        # 當機器人接近目標時，停止
+        if abs(self.prev_err_dis) < 0.02 and abs(self.prev_err_theta) < 0.05:
+            print("🎯 到達目標，停止機器人")
+            cmd = Twist()  # 停止機器人
+        
         self.cmd_pub.publish(cmd)
 
 def main(args=None):
