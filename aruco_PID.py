@@ -10,7 +10,7 @@ class ArucoPIDController(Node):
     def __init__(self):
         super().__init__('aruco_pid_controller')
         
-        # 訂閱 /cmd_vel 來發送控制訊號
+        # 發布 /cmd_vel 來控制機器人
         self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 5)
         self.timer = self.create_timer(0.15, self.control_loop)  # 每 0.15 秒執行一次
 
@@ -30,7 +30,7 @@ class ArucoPIDController(Node):
 
         # 設定攝影機
         self.cap = cv2.VideoCapture(0)  # 攝影機索引
-        self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+        self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_50)
         self.aruco_params = aruco.DetectorParameters()
 
         # 設定目標 ArUco 標記 ID
@@ -38,7 +38,7 @@ class ArucoPIDController(Node):
         self.target_id = 2
 
     def detect_aruco(self):
-        """ 透過攝影機影像偵測 ArUco 標記 """
+        """ 偵測 ArUco 標記，並顯示 ID、X、Y 座標 """
         ret, frame = self.cap.read()
         if not ret:
             return None, None, None
@@ -53,7 +53,15 @@ class ArucoPIDController(Node):
                 center_x = int(np.mean(c[:, 0]))
                 center_y = int(np.mean(c[:, 1]))
                 positions[marker_id] = (center_x, center_y)
-        
+
+                # 在終端機顯示 Marker ID 和座標
+                print(f"Marker ID: {marker_id}, X: {center_x}, Y: {center_y}")
+
+                # 在影像畫面上標示 ArUco 標記
+                cv2.putText(frame, f"ID: {marker_id}", (center_x - 10, center_y - 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                cv2.circle(frame, (center_x, center_y), 5, (0, 0, 255), -1)
+
         return positions.get(self.robot_id, None), positions.get(self.target_id, None), frame
 
     def compute_control(self, robot_pos, target_pos):
@@ -71,7 +79,7 @@ class ArucoPIDController(Node):
         target_angle = math.atan2(target_y - robot_y, target_x - robot_x)
         err_theta = target_angle  # 假設機器人方向與攝影機對齊，簡化角度計算
 
-        # PID 控制
+        # PID 控制計算
         self.integral_dis += err_dis
         self.integral_theta += err_theta
 
@@ -112,11 +120,13 @@ class ArucoPIDController(Node):
         cmd = Twist()
         cmd.linear.x = linear_speed
         cmd.angular.z = angular_speed
-        if abs(self.err_dis) < 0.02 and abs(self.err_theta) < 0.05:  # 誤差很小時
-            cmd = Twist()  # 建立空的 Twist（速度為 0）
-            self.cmd_pub.publish(cmd)  # 立即清除運動
-        else:
-            self.cmd_pub.publish(cmd)
+        
+        # 當機器人接近目標時，停止移動
+        if abs(self.prev_err_dis) < 0.02 and abs(self.prev_err_theta) < 0.05:
+            cmd = Twist()  # 停止
+            print("到達目標，停止機器人")
+        
+        self.cmd_pub.publish(cmd)
 
 def main(args=None):
     rclpy.init(args=args)
