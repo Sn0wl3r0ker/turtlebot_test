@@ -19,7 +19,7 @@ class ArucoPIDController(Node):
         self.Ki_linear = 0.001
         self.Kd_linear = 0.01
 
-        self.Kp_angular = 0.5
+        self.Kp_angular = 0.3
         self.Ki_angular = 0.0001
         self.Kd_angular = 0.01
 
@@ -108,7 +108,12 @@ class ArucoPIDController(Node):
         self.prev_err_theta = err_theta
 
         # 計算速度輸出
-        angular_speed = (self.Kp_angular * err_theta) + (self.Ki_angular * self.integral_theta) + (self.Kd_angular * derivative_theta)
+        max_angular_change = 0.2  # 限制每次角速度變化不超過 0.2
+
+# 限制角速度變化率
+        angular_speed = max(min(angular_speed, self.prev_err_theta + max_angular_change), self.prev_err_theta - max_angular_change)
+        # angular_speed = (self.Kp_angular * err_theta) + (self.Ki_angular * self.integral_theta) + (self.Kd_angular * derivative_theta)
+        print(f"🔄 角度誤差: {err_theta:.3f} rad, 原始 angular.z: {angular_speed:.3f}")
 
         # **確保機器人先轉向目標，再前進**
         if abs(err_theta) > 0.1:  # 若角度誤差大於 0.1，優先轉向
@@ -118,7 +123,7 @@ class ArucoPIDController(Node):
 
         # 限制速度範圍
         linear_speed = max(min(linear_speed, 0.2), -0.2)
-        angular_speed = max(min(angular_speed, 1.0), -1.0)
+        angular_speed = max(min(angular_speed, 1.0), -1.0)  # 最終仍限制最大範圍
 
         return linear_speed, angular_speed
 
