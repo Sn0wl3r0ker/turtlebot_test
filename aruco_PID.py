@@ -72,11 +72,12 @@ class ArucoPIDController(Node):
                 print(f"Marker ID: {marker_id}, X: {x:.3f}m, Y: {y:.3f}m, Z: {z:.3f}m")
 
                 # 在影像上標示 ArUco 標記
-                cv2.putText(frame, f"ID: {marker_id}", (int(c[:, 0].mean()), int(c[:, 1].mean()) - 10), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                cv2.putText(frame, f"X: {x:.3f}m, Y: {y:.3f}m, Z: {z:.3f}m", 
-                            (int(c[:, 0].mean()), int(c[:, 1].mean()) + 20), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                # cv2.putText(frame, f"ID: {marker_id}", (int(c[:, 0].mean()), int(c[:, 1].mean()) - 10), 
+                #             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                # cv2.putText(frame, f"X: {x:.3f}m, Y: {y:.3f}m, Z: {z:.3f}m", 
+                #             (int(c[:, 0].mean()), int(c[:, 1].mean()) + 20), 
+                #             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                aruco.drawAxis(frame, self.camera_matrix, self.dist_coeffs, rvec, tvec, self.marker_length * 0.5)
 
                 positions[marker_id] = (x, y, z)
 
