@@ -4,6 +4,7 @@ from geometry_msgs.msg import Twist
 import cv2
 import numpy as np
 import math
+import time
 from cv2 import aruco
 
 class ArucoPIDController(Node):
@@ -37,8 +38,21 @@ class ArucoPIDController(Node):
         self.robot_id = 1
         self.target_id = 2
 
+        # ArUco 標記實際大小（單位：公尺）
+        self.marker_length = 0.06  # 5cm 標記
+
+        # 相機內參數（Camera Calibration）
+        self.camera_matrix = np.array([[960.42974, 0.0, 628.25951],
+                                       [0.0, 960.58843, 339.99534],
+                                       [0.0, 0.0, 1.0]])
+        self.dist_coeffs = np.array([0.01736, -0.076006, 0.002602, 0.000286, 0.0])
+
+        # 設定倒數計時（秒）
+        self.start_time = time.time()
+        self.countdown = 30  # 30 秒後停止機器人
+
     def detect_aruco(self):
-        """ 偵測 ArUco 標記，並顯示 ID、X、Y 座標 """
+        """ 偵測 ArUco 標記，並顯示 ID、3D 坐標（X, Y, Z） """
         ret, frame = self.cap.read()
         if not ret:
             return None, None, None
@@ -50,17 +64,29 @@ class ArucoPIDController(Node):
         if ids is not None:
             for i, marker_id in enumerate(ids.flatten()):
                 c = corners[i][0]
-                center_x = int(np.mean(c[:, 0]))
-                center_y = int(np.mean(c[:, 1]))
-                positions[marker_id] = (center_x, center_y)
 
-                # 在終端機顯示 Marker ID 和座標
-                print(f"Marker ID: {marker_id}, X: {center_x}, Y: {center_y}")
+                # 估算 ArUco 標記的 3D 姿態（Position & Rotation）
+                rvec, tvec, _ = aruco.estimatePoseSingleMarkers(
+                    corners[i], self.marker_length, self.camera_matrix, self.dist_coeffs
+                )
 
-                # 在影像畫面上標示 ArUco 標記
-                cv2.putText(frame, f"ID: {marker_id}", (center_x - 10, center_y - 10), 
+                # 轉換平移向量 (tvec) 為 3D 坐標
+                x, y, z = tvec[0][0]
+
+                # 顯示 Marker ID 和 3D 座標
+                print(f"Marker ID: {marker_id}, X: {x:.3f}m, Y: {y:.3f}m, Z: {z:.3f}m")
+
+                # 在影像上標示 ArUco 標記
+                cv2.putText(frame, f"ID: {marker_id}", (int(c[:, 0].mean()), int(c[:, 1].mean()) - 10), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                cv2.circle(frame, (center_x, center_y), 5, (0, 0, 255), -1)
+                cv2.putText(frame, f"X: {x:.3f}m, Y: {y:.3f}m, Z: {z:.3f}m", 
+                            (int(c[:, 0].mean()), int(c[:, 1].mean()) + 20), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+
+                # 在影像上繪製 3D 坐標軸
+                aruco.drawAxis(frame, self.camera_matrix, self.dist_coeffs, rvec, tvec, self.marker_length * 0.5)
+
+                positions[marker_id] = (x, y, z)
 
         return positions.get(self.robot_id, None), positions.get(self.target_id, None), frame
 
@@ -69,15 +95,15 @@ class ArucoPIDController(Node):
         if robot_pos is None or target_pos is None:
             return None
 
-        robot_x, robot_y = robot_pos
-        target_x, target_y = target_pos
+        robot_x, robot_y, robot_z = robot_pos
+        target_x, target_y, target_z = target_pos
 
         # 計算位置誤差
         err_dis = math.sqrt((target_x - robot_x) ** 2 + (target_y - robot_y) ** 2)
 
         # 計算角度誤差
         target_angle = math.atan2(target_y - robot_y, target_x - robot_x)
-        err_theta = target_angle  # 假設機器人方向與攝影機對齊，簡化角度計算
+        err_theta = target_angle
 
         # PID 控制計算
         self.integral_dis += err_dis
@@ -116,16 +142,17 @@ class ArucoPIDController(Node):
 
         linear_speed, angular_speed = control_output
 
+        # 倒數計時
+        elapsed_time = time.time() - self.start_time
+        if elapsed_time >= self.countdown:
+            print("⏳ 倒數結束，停止機器人")
+            self.cmd_pub.publish(Twist())  # 停止機器人
+            return
+
         # 發送控制訊號
         cmd = Twist()
         cmd.linear.x = linear_speed
         cmd.angular.z = angular_speed
-        
-        # 當機器人接近目標時，停止移動
-        if abs(self.prev_err_dis) < 0.02 and abs(self.prev_err_theta) < 0.05:
-            cmd = Twist()  # 停止
-            print("到達目標，停止機器人")
-        
         self.cmd_pub.publish(cmd)
 
 def main(args=None):
