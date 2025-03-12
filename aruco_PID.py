@@ -38,7 +38,7 @@ class ArucoPIDController(Node):
         self.target_id = 2
 
         # ArUco 標記實際大小（單位：公尺）
-        self.marker_length = 0.06  # 5cm 標記
+        self.marker_length = 0.06  # 6cm 標記
 
         # 相機內參數（Camera Calibration）
         self.camera_matrix = np.array([[960.42974, 0.0, 628.25951],
@@ -47,7 +47,7 @@ class ArucoPIDController(Node):
         self.dist_coeffs = np.array([0.01736, -0.076006, 0.002602, 0.000286, 0.0])
 
     def detect_aruco(self):
-        """ 偵測 ArUco 標記並顯示 ID、3D 坐標（X, Y, Z） """
+        """ 偵測 ArUco 標記並在畫面中繪製 3D 坐標軸與數值 """
         ret, frame = self.cap.read()
         if not ret:
             return None, None, None
@@ -60,43 +60,38 @@ class ArucoPIDController(Node):
             for i, marker_id in enumerate(ids.flatten()):
                 c = corners[i][0]
 
-                # 估算 ArUco 標記的 3D 姿態（Position & Rotation）
+                # 估算 ArUco 標記的 3D 姿態
                 rvec, tvec, _ = aruco.estimatePoseSingleMarkers(
                     corners[i], self.marker_length, self.camera_matrix, self.dist_coeffs
                 )
 
-                # 轉換平移向量 (tvec) 為 3D 坐標
+                # 取得 ArUco 標記的 3D 座標
                 x, y, z = tvec[0][0]
+                positions[marker_id] = (x, y, z)
 
-                # 顯示 Marker ID 和 3D 座標
-                print(f"Marker ID: {marker_id}, X: {x:.3f}m, Y: {y:.3f}m, Z: {z:.3f}m")
-
-                # 在影像上標示 ArUco 標記
-                # cv2.putText(frame, f"ID: {marker_id}", (int(c[:, 0].mean()), int(c[:, 1].mean()) - 10), 
-                #             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                # cv2.putText(frame, f"X: {x:.3f}m, Y: {y:.3f}m, Z: {z:.3f}m", 
-                #             (int(c[:, 0].mean()), int(c[:, 1].mean()) + 20), 
-                #             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+                # 繪製 3D 坐標軸
                 cv2.drawFrameAxes(frame, self.camera_matrix, self.dist_coeffs, rvec, tvec, self.marker_length * 0.5)
 
-                positions[marker_id] = (x, y, z)
+                # 在影像上顯示座標
+                text_pos = (int(c[:, 0].mean()), int(c[:, 1].mean()) + 20)
+                # cv2.putText(frame, f"X: {x:.3f}m, Y: {y:.3f}m, Z: {z:.3f}m", 
+                #             text_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
         return positions.get(self.robot_id, None), positions.get(self.target_id, None), frame
 
     def compute_control(self, robot_pos, target_pos):
-        """ 計算 PID 控制輸出 """
+        """ 計算 PID 控制輸出，確保機器人先轉向目標，再前進 """
         if robot_pos is None or target_pos is None:
             return None
 
         robot_x, robot_y, robot_z = robot_pos
         target_x, target_y, target_z = target_pos
 
-        # 設定 TurtleBot3 正前方方向（選擇 X 軸或 Y 軸）
-        # 這裡假設機器人前方是 Z 軸，因此主要考慮 X 軸方向
-        err_dis = target_x - robot_x  # 以 X 軸作為前進方向
+        # 設定 TurtleBot3 的前進方向為 Y 軸
+        err_dis = target_y - robot_y  
 
-        # 計算角度誤差（機器人轉向目標標記）
-        target_angle = math.atan2(target_y - robot_y, target_x - robot_x)
+        # 計算角度誤差
+        target_angle = math.atan2(target_x - robot_x, target_y - robot_y)
         err_theta = target_angle
 
         # PID 控制計算
@@ -109,9 +104,14 @@ class ArucoPIDController(Node):
         self.prev_err_dis = err_dis
         self.prev_err_theta = err_theta
 
-        # 計算控制輸出
-        linear_speed = (self.Kp_linear * err_dis) + (self.Ki_linear * self.integral_dis) + (self.Kd_linear * derivative_dis)
+        # 計算速度輸出
         angular_speed = (self.Kp_angular * err_theta) + (self.Ki_angular * self.integral_theta) + (self.Kd_angular * derivative_theta)
+
+        # **確保機器人先轉向目標，再前進**
+        if abs(err_theta) > 0.1:  # 若角度誤差大於 0.1，優先轉向
+            linear_speed = 0.0
+        else:
+            linear_speed = (self.Kp_linear * err_dis) + (self.Ki_linear * self.integral_dis) + (self.Kd_linear * derivative_dis)
 
         # 限制速度範圍
         linear_speed = max(min(linear_speed, 0.2), -0.2)
