@@ -94,7 +94,7 @@ class ArucoPIDController(Node):
         err_dis = target_y - robot_y  
 
         # 計算角度誤差
-        target_angle = math.atan2(target_x - robot_x, target_y - robot_y)
+        target_angle = math.atan2(target_y - robot_y, target_x - robot_x)
         err_theta = target_angle
 
         # PID 控制計算
