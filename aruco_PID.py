@@ -29,7 +29,7 @@ class ArucoPIDController(Node):
         self.integral_theta = 0.0
 
         # 設定攝影機
-        self.cap = cv2.VideoCapture(0)  # 攝影機索引
+        self.cap = cv2.VideoCapture(2)  # 攝影機索引
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_50)
         self.aruco_params = aruco.DetectorParameters()
 
@@ -41,10 +41,10 @@ class ArucoPIDController(Node):
         self.marker_length = 0.06  # 6cm 標記
 
         # 相機內參數（Camera Calibration）
-        self.camera_matrix = np.array([[641.2391308,    0.,         316.90188846],
-                                       [0.,         639.76069811, 227.92853594],
+        self.camera_matrix = np.array([[641.2391308, 0., 316.90188846],
+                                       [0., 639.76069811, 227.92853594],
                                        [0.0, 0.0, 1.0]])
-        self.dist_coeffs = np.array([8.27101136e-03,  2.35184440e-01,  4.10730291e-03,  3.48728526e-04, -1.40848823e+00])
+        self.dist_coeffs = np.array([8.27101136e-03, 2.35184440e-01, 4.10730291e-03, 3.48728526e-04, -1.40848823e+00])
 
     def detect_aruco(self):
         """ 偵測 ArUco 標記並計算機器人朝向 """
@@ -95,8 +95,8 @@ class ArucoPIDController(Node):
         robot_x, robot_y, robot_z = robot_pos
         target_x, target_y, target_z = target_pos
 
-        # Y 軸為前進方向，計算距離誤差
-        err_dis = target_y - robot_y
+        # 計算斜邊距離誤差（歐幾里得距離）
+        err_dis = math.sqrt((target_x - robot_x)**2 + (target_y - robot_y)**2)
 
         # 計算目標方向（從機器人到目標）
         target_angle = math.atan2(target_x - robot_x, target_y - robot_y)
@@ -121,13 +121,14 @@ class ArucoPIDController(Node):
         angular_speed = (self.Kp_angular * err_theta) + (self.Ki_angular * self.integral_theta) + (self.Kd_angular * derivative_theta)
         angular_speed = max(min(angular_speed, 1.0), -1.0)  # 限制最大角速度
 
+        print(f"📏 距離誤差: {err_dis:.3f} m, linear.x: {self.Kp_linear * err_dis:.3f}")
         print(f"🔄 角度誤差: {err_theta:.3f} rad, angular.z: {angular_speed:.3f}")
 
         # 若角度誤差較大，先轉向
         if abs(err_theta) > 0.1:
             linear_speed = 0.0
         else:
-            linear_speed = (self.Kp_linear * err_dis) + (self.Ki_linear * self.integral_dis) + (self.Kd_linear * derivative_dis)
+            linear_speed = -(self.Kp_linear * err_dis) + (self.Ki_linear * self.integral_dis) + (self.Kd_linear * derivative_dis)
             linear_speed = max(min(linear_speed, 0.2), -0.2)  # 限制線速度
 
         return linear_speed, angular_speed
@@ -141,6 +142,10 @@ class ArucoPIDController(Node):
             cv2.waitKey(1)
 
         if robot_pos is None or target_pos is None or robot_orientation is None:
+            cmd = Twist()  # 停止機器人
+            cmd.linear.x = 0.0
+            cmd.angular.z = 0.0
+            self.cmd_pub.publish(cmd)
             return
 
         control_output = self.compute_control(robot_pos, target_pos, robot_orientation)
@@ -157,9 +162,16 @@ class ArucoPIDController(Node):
         cmd.angular.z = angular_speed
 
         # 當機器人接近目標時，停止
-        if abs(self.prev_err_dis) < 0.02 and abs(self.prev_err_theta) < 0.05:
+        if abs(self.prev_err_dis) < 0.26:
             print("🎯 到達目標，停止機器人")
             cmd = Twist()  # 停止機器人
+            cmd.linear.x = 0.0
+            cmd.angular.z = 0.0
+        elif target_pos is None:
+            print("🎯 到達目標or未偵測到目標，停止機器人")
+            cmd = Twist()
+            cmd.linear.x = 0.0
+            cmd.angular.z = 0.0
         
         self.cmd_pub.publish(cmd)
 
