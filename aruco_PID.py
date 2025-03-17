@@ -41,7 +41,7 @@ class ArucoPIDController(Node):
         self.marker_length = 0.06  # 6cm 標記
 
         # 相機內參數（Camera Calibration）
-         self.camera_matrix = np.array([[641.2391308,    0.,         316.90188846],
+        self.camera_matrix = np.array([[641.2391308,    0.,         316.90188846],
                                        [0.,         639.76069811, 227.92853594],
                                        [0.0, 0.0, 1.0]])
         self.dist_coeffs = np.array([8.27101136e-03,  2.35184440e-01,  4.10730291e-03,  3.48728526e-04, -1.40848823e+00])
