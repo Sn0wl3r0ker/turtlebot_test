@@ -15,13 +15,13 @@ class ArucoPIDController(Node):
         self.timer = self.create_timer(0.15, self.control_loop)  # 每 0.15 秒執行一次
 
         # PID 參數
-        self.Kp_linear = 0.5
-        self.Ki_linear = 0.001
-        self.Kd_linear = 0.01
+        self.Kp_linear = 0.4
+        self.Ki_linear = 0.00005
+        self.Kd_linear = 0.05
 
-        self.Kp_angular = 0.3
+        self.Kp_angular = 1.0
         self.Ki_angular = 0.0001
-        self.Kd_angular = 0.01
+        self.Kd_angular = 0.005
 
         self.prev_err_dis = 0.0
         self.prev_err_theta = 0.0
@@ -72,11 +72,8 @@ class ArucoPIDController(Node):
 
                 # 如果是機器人標記，計算朝向（Y 軸方向）
                 if marker_id == self.robot_id:
-                    # 將旋轉向量轉換為旋轉矩陣
                     rmat, _ = cv2.Rodrigues(rvec)
-                    # Y 軸在標記坐標系中是 [0, 1, 0]，轉換到相機坐標系
                     y_axis = rmat @ np.array([0, 1, 0])
-                    # 計算 Y 軸在 XY 平面上的投影角度（弧度）
                     robot_orientation = math.atan2(y_axis[0], y_axis[1])
 
                 # 繪製 3D 坐標軸
@@ -103,13 +100,15 @@ class ArucoPIDController(Node):
 
         # 角度誤差 = 目標方向 - 機器人朝向
         err_theta = target_angle - robot_orientation
-
-        # 將角度誤差正規化到 [-pi, pi]
-        err_theta = (err_theta + math.pi) % (2 * math.pi) - math.pi
+        err_theta = (err_theta + math.pi) % (2 * math.pi) - math.pi  # 正規化到 [-pi, pi]
 
         # PID 控制計算
         self.integral_dis += err_dis
         self.integral_theta += err_theta
+
+        # 限制積分項，防止過度累積
+        if err_dis < 0.26:  # 接近目標時限制積分
+            self.integral_dis = min(max(self.integral_dis, -10.0), 10.0)
 
         derivative_dis = err_dis - self.prev_err_dis
         derivative_theta = err_theta - self.prev_err_theta
@@ -121,15 +120,17 @@ class ArucoPIDController(Node):
         angular_speed = (self.Kp_angular * err_theta) + (self.Ki_angular * self.integral_theta) + (self.Kd_angular * derivative_theta)
         angular_speed = max(min(angular_speed, 1.0), -1.0)  # 限制最大角速度
 
-        print(f"📏 距離誤差: {err_dis:.3f} m, linear.x: {self.Kp_linear * err_dis:.3f}")
+        # 線速度控制，根據角度誤差調整方向
+        base_linear_speed = (self.Kp_linear * err_dis) + (self.Ki_linear * self.integral_dis) + (self.Kd_linear * derivative_dis)
+        linear_speed = -base_linear_speed * math.cos(err_theta)  # 動態調整方向
+        linear_speed = max(min(linear_speed, 0.2), -0.2)  # 限制線速度
+
+        print(f"📏 距離誤差: {err_dis:.3f} m, base_linear: {base_linear_speed:.3f}, integral_dis: {self.integral_dis:.3f}")
         print(f"🔄 角度誤差: {err_theta:.3f} rad, angular.z: {angular_speed:.3f}")
 
         # 若角度誤差較大，先轉向
-        if abs(err_theta) > 0.1:
+        if abs(err_theta) > 0.3:  # 放寬到 0.3 rad (約 17 度)
             linear_speed = 0.0
-        else:
-            linear_speed = -(self.Kp_linear * err_dis) + (self.Ki_linear * self.integral_dis) + (self.Kd_linear * derivative_dis)
-            linear_speed = max(min(linear_speed, 0.2), -0.2)  # 限制線速度
 
         return linear_speed, angular_speed
 
@@ -161,13 +162,15 @@ class ArucoPIDController(Node):
         cmd.linear.x = linear_speed
         cmd.angular.z = angular_speed
 
-        # 當機器人接近目標時，停止
+        # 當機器人接近目標時，停止並重置積分
         if abs(self.prev_err_dis) < 0.26:
             print("🎯 到達目標，停止機器人")
-            cmd = Twist()  # 停止機器人
+            cmd = Twist()
             cmd.linear.x = 0.0
             cmd.angular.z = 0.0
-        elif target_pos is None:
+            self.integral_dis = 0.0  # 重置積分項
+            self.integral_theta = 0.0
+        elif target_pos is None or robot_pos is None:
             print("🎯 到達目標or未偵測到目標，停止機器人")
             cmd = Twist()
             cmd.linear.x = 0.0
