@@ -100,7 +100,7 @@ class ArucoPIDController(Node):
         self.prev_err_theta = err_theta
 
         # 計算控制輸出
-        linear_speed = (self.Kp_linear * err_dis) + (self.Ki_linear * self.integral_dis) + (self.Kd_linear * derivative_dis)
+        linear_speed = -((self.Kp_linear * err_dis) + (self.Ki_linear * self.integral_dis) + (self.Kd_linear * derivative_dis))
         angular_speed = (self.Kp_angular * err_theta) + (self.Ki_angular * self.integral_theta) + (self.Kd_angular * derivative_theta)
 
         # 限制速度範圍
