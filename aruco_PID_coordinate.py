@@ -46,15 +46,15 @@ class ArucoPIDController(Node):
         self.dist_coeffs = np.array([8.27101136e-03, 2.35184440e-01, 4.10730291e-03, 3.48728526e-04, -1.40848823e+00])
 
         # 畫面解析度
-        self.image_width = 1280
-        self.image_height = 720
+        self.image_width = 640
+        self.image_height = 480
 
         # 假設 Z 軸距離固定（單位：公尺）
         self.fixed_z = 1.13
 
         # 初始目標像素座標（預設值）
-        self.target_pixel_x = 1280/2  # 畫面中心
-        self.target_pixel_y = 720/2  # 畫面中心
+        self.target_pixel_x = 320.0  # 畫面中心
+        self.target_pixel_y = 240.0  # 畫面中心
 
     def set_target_pixel(self):
         """ 讓使用者輸入目標像素座標 """
@@ -64,11 +64,13 @@ class ArucoPIDController(Node):
             
             # 檢查輸入是否在有效範圍內
             if not (0 <= self.target_pixel_x <= self.image_width and 0 <= self.target_pixel_y <= self.image_height):
-                print("輸入超出範圍，使用預設值 (640, 480)")
-                self.target_pixel_x = 640.0
-                self.target_pixel_y = 480.0
+                print("輸入超出範圍，使用預設值 (320, 240)")
+                self.target_pixel_x = 320.0
+                self.target_pixel_y = 240.0
         except ValueError:
-            print("輸入無效，使用預設值")
+            print("輸入無效，使用預設值 (320, 240)")
+            self.target_pixel_x = 320.0
+            self.target_pixel_y = 240.0
 
     def pixel_to_camera(self, pixel_x, pixel_y, z_depth):
         """ 將像素座標轉換為相機座標系中的 3D 座標 """
