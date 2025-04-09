@@ -123,9 +123,11 @@ class ArucoPWMController(Node):
         # 印出目前的誤差距離
         print(f"📏 Error distance (err_dis): {err_dis:.4f} m")
 
-        # 小角度誤差死區
-        if abs(err_theta) < 0.1:
+        # 增加死區
+        if abs(err_theta) < 0.15:  # 增加角度誤差死區
             err_theta = 0.0
+        if err_dis < 0.05:  # 增加距離誤差死區
+            err_dis = 0.0
 
         self.integral_dis += err_dis
         self.integral_theta += err_theta
@@ -149,7 +151,8 @@ class ArucoPWMController(Node):
         linear_pwm = max(min(linear_pwm, self.max_pwm_value), -self.max_pwm_value)
         angular_pwm = max(min(angular_pwm, self.max_pwm_value), -self.max_pwm_value)
 
-        if abs(err_theta) > 0.3:
+        # 限制角速度
+        if abs(err_theta) > 0.5:  # 當角度誤差過大時，限制線速度
             linear_pwm = 0
 
         # 計算左右輪
