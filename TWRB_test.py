@@ -11,9 +11,9 @@ class ArucoPWMController(Node):
         super().__init__('aruco_pwm_controller')
 
         self.pwm_pub = self.create_publisher(Int16MultiArray, '/set_pwm', 5)
-        self.timer = self.create_timer(0.15, self.control_loop)
+        self.timer = self.create_timer(0.1, self.control_loop)  # 提升控制反應頻率（10Hz）
 
-        # 調整後的 PID 參數與 PWM 限制
+        # PID 增益
         self.Kp_linear = 30.0
         self.Ki_linear = 0.01
         self.Kd_linear = 5.0
@@ -27,11 +27,12 @@ class ArucoPWMController(Node):
         self.integral_dis = 0.0
         self.integral_theta = 0.0
 
-        # PWM 限制設定
+        # PWM 限制與過濾參數
         self.prev_left_pwm = 0
         self.prev_right_pwm = 0
         self.max_pwm_step = 5
         self.max_pwm_value = 50
+        self.min_pwm_threshold = 40  # 最小啟動 PWM
 
         self.cap = cv2.VideoCapture(2)
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_50)
@@ -101,6 +102,11 @@ class ArucoPWMController(Node):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
         return robot_pos, robot_orientation, frame
 
+    def apply_deadzone(self, pwm):
+        if pwm == 0:
+            return 0
+        return int(math.copysign(max(abs(pwm), self.min_pwm_threshold), pwm))
+
     def compute_pwm(self, robot_pos, robot_orientation):
         if robot_pos is None or robot_orientation is None:
             return [0, 0]
@@ -114,6 +120,10 @@ class ArucoPWMController(Node):
         target_angle = math.atan2(relative_x, relative_y)
         err_theta = (target_angle - robot_orientation + math.pi) % (2 * math.pi) - math.pi
 
+        # 小角度死區，避免微晃
+        if abs(err_theta) < 0.05:
+            err_theta = 0.0
+
         self.integral_dis += err_dis
         self.integral_theta += err_theta
 
@@ -126,14 +136,20 @@ class ArucoPWMController(Node):
         linear_pwm = self.Kp_linear * err_dis + self.Ki_linear * self.integral_dis + self.Kd_linear * derivative_dis
         angular_pwm = self.Kp_angular * err_theta + self.Ki_angular * self.integral_theta + self.Kd_angular * derivative_theta
 
-        # 限制 PWM 值在 ±max_pwm_value
+        # 小輸出過濾
+        if abs(linear_pwm) < 10:
+            linear_pwm = 0
+        if abs(angular_pwm) < 10:
+            angular_pwm = 0
+
+        # 限制最大線性與角速度 PWM
         linear_pwm = max(min(linear_pwm, self.max_pwm_value), -self.max_pwm_value)
         angular_pwm = max(min(angular_pwm, self.max_pwm_value), -self.max_pwm_value)
 
         if abs(err_theta) > 0.3:
             linear_pwm = 0
 
-        # 合成左右輪 PWM 並限制在 ±max_pwm_value
+        # 合成左右輪 PWM
         left_pwm = int(max(min(linear_pwm - angular_pwm, self.max_pwm_value), -self.max_pwm_value))
         right_pwm = int(max(min(linear_pwm + angular_pwm, self.max_pwm_value), -self.max_pwm_value))
 
@@ -143,19 +159,17 @@ class ArucoPWMController(Node):
         self.prev_left_pwm = left_pwm
         self.prev_right_pwm = right_pwm
 
-        if err_dis < 0.05:
+        # 加入 deadzone 補償
+        left_pwm = self.apply_deadzone(left_pwm)
+        right_pwm = self.apply_deadzone(right_pwm)
+
+        # 若已到達目標，停止
+        if err_dis < 0.05 and abs(err_theta) < 0.1:
             print("🎯 已到達目標，停止")
             self.integral_dis = 0.0
             self.integral_theta = 0.0
             return [0, 0]
-        # 加入最小啟動 PWM 閾值補償（死區處理）
-        def apply_deadzone(pwm, threshold):
-            if pwm == 0:
-                return 0
-            return int(math.copysign(max(abs(pwm), threshold), pwm))
 
-        left_pwm = apply_deadzone(left_pwm, 40)
-        right_pwm = apply_deadzone(right_pwm, 40)
         return [left_pwm, right_pwm]
 
     def control_loop(self):
