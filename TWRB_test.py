@@ -13,11 +13,11 @@ class ArucoPWMController(Node):
         self.pwm_pub = self.create_publisher(Int16MultiArray, '/set_pwm', 5)
         self.timer = self.create_timer(0.15, self.control_loop)
 
-        self.Kp_linear = 50.0
+        self.Kp_linear = 30.0
         self.Ki_linear = 0.01
         self.Kd_linear = 5.0
 
-        self.Kp_angular = 100.0
+        self.Kp_angular = 60.0
         self.Ki_angular = 0.01
         self.Kd_angular = 2.0
 
@@ -25,6 +25,11 @@ class ArucoPWMController(Node):
         self.prev_err_theta = 0.0
         self.integral_dis = 0.0
         self.integral_theta = 0.0
+
+        # 新增變數：上一次 PWM 輸出與最大變化量
+        self.prev_left_pwm = 0
+        self.prev_right_pwm = 0
+        self.max_pwm_step = 20
 
         self.cap = cv2.VideoCapture(2)
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_50)
@@ -119,11 +124,22 @@ class ArucoPWMController(Node):
         linear_pwm = self.Kp_linear * err_dis + self.Ki_linear * self.integral_dis + self.Kd_linear * derivative_dis
         angular_pwm = self.Kp_angular * err_theta + self.Ki_angular * self.integral_theta + self.Kd_angular * derivative_theta
 
+        # 限制最大線性與角速度 PWM
+        linear_pwm = max(min(linear_pwm, 255), -255)
+        angular_pwm = max(min(angular_pwm, 255), -255)
+
         if abs(err_theta) > 0.3:
             linear_pwm = 0
 
+        # 組合 PWM 並限幅
         left_pwm = int(max(min(linear_pwm - angular_pwm, 255), -255))
         right_pwm = int(max(min(linear_pwm + angular_pwm, 255), -255))
+
+        # 防止瞬間變化過大
+        left_pwm = int(np.clip(left_pwm, self.prev_left_pwm - self.max_pwm_step, self.prev_left_pwm + self.max_pwm_step))
+        right_pwm = int(np.clip(right_pwm, self.prev_right_pwm - self.max_pwm_step, self.prev_right_pwm + self.max_pwm_step))
+        self.prev_left_pwm = left_pwm
+        self.prev_right_pwm = right_pwm
 
         if err_dis < 0.05:
             print("🎯 已到達目標，停止")
