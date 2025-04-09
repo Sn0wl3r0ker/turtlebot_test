@@ -11,7 +11,7 @@ class ArucoPWMController(Node):
         super().__init__('aruco_pwm_controller')
 
         self.pwm_pub = self.create_publisher(Int16MultiArray, '/set_pwm', 5)
-        self.timer = self.create_timer(0.1, self.control_loop)
+        self.timer = self.create_timer(0.2, self.control_loop)
 
         self.Kp_linear = 30.0
         self.Ki_linear = 0.01
