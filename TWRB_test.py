@@ -17,9 +17,9 @@ class ArucoPWMController(Node):
         self.Ki_linear = 0.01
         self.Kd_linear = 5.0
 
-        self.Kp_angular = 40.0   # 降低 P
-        self.Ki_angular = 0.0    # 移除 I
-        self.Kd_angular = 4.0    # 加強 D 阻尼
+        self.Kp_angular = 40.0
+        self.Ki_angular = 0.0
+        self.Kd_angular = 4.0
 
         self.prev_err_dis = 0.0
         self.prev_err_theta = 0.0
@@ -137,31 +137,32 @@ class ArucoPWMController(Node):
         linear_pwm = self.Kp_linear * err_dis + self.Ki_linear * self.integral_dis + self.Kd_linear * derivative_dis
         angular_pwm = self.Kp_angular * err_theta + self.Ki_angular * self.integral_theta + self.Kd_angular * derivative_theta
 
-        # 極小輸出清除
-        if abs(linear_pwm) < 10:
+        # 印出原始控制量
+        print(f"[Debug] err_theta: {err_theta:.4f}, linear_pwm: {linear_pwm:.2f}, angular_pwm: {angular_pwm:.2f}")
+
+        # 小輸出過濾：從 <10 改為 <5
+        if abs(linear_pwm) < 5:
             linear_pwm = 0
-        if abs(angular_pwm) < 10:
+        if abs(angular_pwm) < 5:
             angular_pwm = 0
 
-        # 限制最大 PWM
         linear_pwm = max(min(linear_pwm, self.max_pwm_value), -self.max_pwm_value)
         angular_pwm = max(min(angular_pwm, self.max_pwm_value), -self.max_pwm_value)
 
-        # 控制切換策略（抑制同時轉向與直行）
-        if abs(err_theta) > 0.3:
+        # 控制切換策略（放寬條件）
+        if abs(err_theta) > 0.4:
             linear_pwm = 0
-        elif abs(err_theta) < 0.15:
+        elif abs(err_theta) < 0.2:
             angular_pwm = 0
 
-        # 左右輪組合
         left_pwm = int(max(min(linear_pwm - angular_pwm, self.max_pwm_value), -self.max_pwm_value))
         right_pwm = int(max(min(linear_pwm + angular_pwm, self.max_pwm_value), -self.max_pwm_value))
 
-        # 抑制瞬間變化（限制變動量）
+        # 限制變動幅度
         left_pwm = int(np.clip(left_pwm, self.prev_left_pwm - self.max_pwm_step, self.prev_left_pwm + self.max_pwm_step))
         right_pwm = int(np.clip(right_pwm, self.prev_right_pwm - self.max_pwm_step, self.prev_right_pwm + self.max_pwm_step))
 
-        # 濾波器（平滑輸出）
+        # 濾波器
         alpha = 0.5
         left_pwm = int(alpha * left_pwm + (1 - alpha) * self.prev_left_pwm)
         right_pwm = int(alpha * right_pwm + (1 - alpha) * self.prev_right_pwm)
@@ -169,15 +170,15 @@ class ArucoPWMController(Node):
         self.prev_left_pwm = left_pwm
         self.prev_right_pwm = right_pwm
 
-        # 馬達死區補償
+        # Deadzone 補償
         left_pwm = self.apply_deadzone(left_pwm)
         right_pwm = self.apply_deadzone(right_pwm)
 
-        # 超靠近時強制停車
+        # 強制停車
         if err_dis < 0.02 and abs(err_theta) < 0.1:
             return [0, 0]
 
-        # 穩定到達目標判斷（連續5次）
+        # 穩定判斷
         if err_dis < 0.05 and abs(err_theta) < 0.1:
             self.stable_count += 1
             if self.stable_count >= 5:
