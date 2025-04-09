@@ -10,10 +10,9 @@ class ArucoPWMController(Node):
     def __init__(self):
         super().__init__('aruco_pwm_controller')
 
-        self.pwm_pub = self.create_publisher(Int16MultiArray, '/set_pwm', 1)
-        self.timer = self.create_timer(0.1, self.control_loop)  # 提升控制反應頻率（10Hz）
+        self.pwm_pub = self.create_publisher(Int16MultiArray, '/set_pwm', 5)
+        self.timer = self.create_timer(0.1, self.control_loop)
 
-        # PID 增益
         self.Kp_linear = 30.0
         self.Ki_linear = 0.01
         self.Kd_linear = 5.0
@@ -27,12 +26,13 @@ class ArucoPWMController(Node):
         self.integral_dis = 0.0
         self.integral_theta = 0.0
 
-        # PWM 限制與過濾參數
         self.prev_left_pwm = 0
         self.prev_right_pwm = 0
         self.max_pwm_step = 5
-        self.max_pwm_value = 60
-        self.min_pwm_threshold = 30  # 最小啟動 PWM
+        self.max_pwm_value = 50
+        self.min_pwm_threshold = 30
+
+        self.stable_count = 0  # 用來判斷是否穩定到達
 
         self.cap = cv2.VideoCapture(2)
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_50)
@@ -120,8 +120,11 @@ class ArucoPWMController(Node):
         target_angle = math.atan2(relative_x, relative_y)
         err_theta = (target_angle - robot_orientation + math.pi) % (2 * math.pi) - math.pi
 
-        # 小角度死區，避免微晃
-        if abs(err_theta) < 0.05:
+        # 印出目前的誤差距離
+        print(f"📏 Error distance (err_dis): {err_dis:.4f} m")
+
+        # 小角度誤差死區
+        if abs(err_theta) < 0.1:
             err_theta = 0.0
 
         self.integral_dis += err_dis
@@ -142,33 +145,37 @@ class ArucoPWMController(Node):
         if abs(angular_pwm) < 10:
             angular_pwm = 0
 
-        # 限制最大線性與角速度 PWM
+        # 限制最大 PWM
         linear_pwm = max(min(linear_pwm, self.max_pwm_value), -self.max_pwm_value)
         angular_pwm = max(min(angular_pwm, self.max_pwm_value), -self.max_pwm_value)
 
         if abs(err_theta) > 0.3:
             linear_pwm = 0
 
-        # 合成左右輪 PWM
+        # 計算左右輪
         left_pwm = int(max(min(linear_pwm - angular_pwm, self.max_pwm_value), -self.max_pwm_value))
         right_pwm = int(max(min(linear_pwm + angular_pwm, self.max_pwm_value), -self.max_pwm_value))
 
-        # 防止瞬間變化太大
+        # 平滑變動
         left_pwm = int(np.clip(left_pwm, self.prev_left_pwm - self.max_pwm_step, self.prev_left_pwm + self.max_pwm_step))
         right_pwm = int(np.clip(right_pwm, self.prev_right_pwm - self.max_pwm_step, self.prev_right_pwm + self.max_pwm_step))
         self.prev_left_pwm = left_pwm
         self.prev_right_pwm = right_pwm
 
-        # 加入 deadzone 補償
+        # 補償馬達死區
         left_pwm = self.apply_deadzone(left_pwm)
         right_pwm = self.apply_deadzone(right_pwm)
 
-        # 若已到達目標，停止
+        # 加入穩定次數判斷
         if err_dis < 0.05 and abs(err_theta) < 0.1:
-            print("🎯 已到達目標，停止")
-            self.integral_dis = 0.0
-            self.integral_theta = 0.0
-            return [0, 0]
+            self.stable_count += 1
+            if self.stable_count >= 5:
+                print("🎯 已穩定到達目標，停止")
+                self.integral_dis = 0.0
+                self.integral_theta = 0.0
+                return [0, 0]
+        else:
+            self.stable_count = 0
 
         return [left_pwm, right_pwm]
 
