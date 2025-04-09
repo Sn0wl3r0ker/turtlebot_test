@@ -10,7 +10,7 @@ class ArucoPWMController(Node):
     def __init__(self):
         super().__init__('aruco_pwm_controller')
 
-        self.pwm_pub = self.create_publisher(Int16MultiArray, '/set_pwm', 5)
+        self.pwm_pub = self.create_publisher(Int16MultiArray, '/set_pwm', 1)
         self.timer = self.create_timer(0.1, self.control_loop)  # 提升控制反應頻率（10Hz）
 
         # PID 增益
