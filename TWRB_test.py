@@ -17,9 +17,9 @@ class ArucoPWMController(Node):
         self.Ki_linear = 0.01
         self.Kd_linear = 5.0
 
-        self.Kp_angular = 60.0
-        self.Ki_angular = 0.01
-        self.Kd_angular = 2.0
+        self.Kp_angular = 40.0   # 降低 P
+        self.Ki_angular = 0.0    # 移除 I
+        self.Kd_angular = 4.0    # 加強 D 阻尼
 
         self.prev_err_dis = 0.0
         self.prev_err_theta = 0.0
@@ -32,7 +32,7 @@ class ArucoPWMController(Node):
         self.max_pwm_value = 50
         self.min_pwm_threshold = 30
 
-        self.stable_count = 0  # 用來判斷是否穩定到達
+        self.stable_count = 0
 
         self.cap = cv2.VideoCapture(2)
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_50)
@@ -120,14 +120,10 @@ class ArucoPWMController(Node):
         target_angle = math.atan2(relative_x, relative_y)
         err_theta = (target_angle - robot_orientation + math.pi) % (2 * math.pi) - math.pi
 
-        # 印出目前的誤差距離
         print(f"📏 Error distance (err_dis): {err_dis:.4f} m")
 
-        # 增加死區
-        if abs(err_theta) < 0.15:  # 增加角度誤差死區
+        if abs(err_theta) < 0.2:
             err_theta = 0.0
-        if err_dis < 0.05:  # 增加距離誤差死區
-            err_dis = 0.0
 
         self.integral_dis += err_dis
         self.integral_theta += err_theta
@@ -141,7 +137,7 @@ class ArucoPWMController(Node):
         linear_pwm = self.Kp_linear * err_dis + self.Ki_linear * self.integral_dis + self.Kd_linear * derivative_dis
         angular_pwm = self.Kp_angular * err_theta + self.Ki_angular * self.integral_theta + self.Kd_angular * derivative_theta
 
-        # 小輸出過濾
+        # 極小輸出清除
         if abs(linear_pwm) < 10:
             linear_pwm = 0
         if abs(angular_pwm) < 10:
@@ -151,25 +147,37 @@ class ArucoPWMController(Node):
         linear_pwm = max(min(linear_pwm, self.max_pwm_value), -self.max_pwm_value)
         angular_pwm = max(min(angular_pwm, self.max_pwm_value), -self.max_pwm_value)
 
-        # 限制角速度
-        if abs(err_theta) > 0.5:  # 當角度誤差過大時，限制線速度
+        # 控制切換策略（抑制同時轉向與直行）
+        if abs(err_theta) > 0.3:
             linear_pwm = 0
+        elif abs(err_theta) < 0.15:
+            angular_pwm = 0
 
-        # 計算左右輪
+        # 左右輪組合
         left_pwm = int(max(min(linear_pwm - angular_pwm, self.max_pwm_value), -self.max_pwm_value))
         right_pwm = int(max(min(linear_pwm + angular_pwm, self.max_pwm_value), -self.max_pwm_value))
 
-        # 平滑變動
+        # 抑制瞬間變化（限制變動量）
         left_pwm = int(np.clip(left_pwm, self.prev_left_pwm - self.max_pwm_step, self.prev_left_pwm + self.max_pwm_step))
         right_pwm = int(np.clip(right_pwm, self.prev_right_pwm - self.max_pwm_step, self.prev_right_pwm + self.max_pwm_step))
+
+        # 濾波器（平滑輸出）
+        alpha = 0.5
+        left_pwm = int(alpha * left_pwm + (1 - alpha) * self.prev_left_pwm)
+        right_pwm = int(alpha * right_pwm + (1 - alpha) * self.prev_right_pwm)
+
         self.prev_left_pwm = left_pwm
         self.prev_right_pwm = right_pwm
 
-        # 補償馬達死區
+        # 馬達死區補償
         left_pwm = self.apply_deadzone(left_pwm)
         right_pwm = self.apply_deadzone(right_pwm)
 
-        # 加入穩定次數判斷
+        # 超靠近時強制停車
+        if err_dis < 0.02 and abs(err_theta) < 0.1:
+            return [0, 0]
+
+        # 穩定到達目標判斷（連續5次）
         if err_dis < 0.05 and abs(err_theta) < 0.1:
             self.stable_count += 1
             if self.stable_count >= 5:
