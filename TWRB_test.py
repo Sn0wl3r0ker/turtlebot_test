@@ -148,7 +148,14 @@ class ArucoPWMController(Node):
             self.integral_dis = 0.0
             self.integral_theta = 0.0
             return [0, 0]
+        # 加入最小啟動 PWM 閾值補償（死區處理）
+        def apply_deadzone(pwm, threshold):
+            if pwm == 0:
+                return 0
+            return int(math.copysign(max(abs(pwm), threshold), pwm))
 
+        left_pwm = apply_deadzone(left_pwm, 40)
+        right_pwm = apply_deadzone(right_pwm, 40)
         return [left_pwm, right_pwm]
 
     def control_loop(self):
