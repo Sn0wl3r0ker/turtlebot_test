@@ -31,7 +31,7 @@ class ArucoPWMController(Node):
         self.prev_left_pwm = 0
         self.prev_right_pwm = 0
         self.max_pwm_step = 5
-        self.max_pwm_value = 50
+        self.max_pwm_value = 60
         self.min_pwm_threshold = 30  # 最小啟動 PWM
 
         self.cap = cv2.VideoCapture(2)
