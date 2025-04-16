@@ -47,7 +47,7 @@ class ArucoFollowController(Node):
 
         self.target_reached = False
         self.align_done = False
-        self.target_pos = None  # (x, y)
+        self.target_pos = None
 
     def detect_aruco(self):
         ret, frame = self.cap.read()
@@ -81,16 +81,24 @@ class ArucoFollowController(Node):
                     leader_ori = theta
                     print(f"📌 ID1 ArUco 相對位置: x={x:.2f}, y={y:.2f}, z={z:.2f}")
 
-                    # 計算目標位置：y 軸反方向 + 0.15m
+                    # 計算 ID2 目標位置：往 ID1 背後移動 0.15m
                     opposite_y = y - 0.15 * math.cos(theta)
                     opposite_x = x - 0.15 * math.sin(theta)
                     self.target_pos = (opposite_x, opposite_y)
-
                     print(f"🎯 ID2 target: x={opposite_x:.2f}, y={opposite_y:.2f}")
 
-                    # 畫出目標位置標示
-                    cv2.putText(frame, "ID2 target", (int(corners[i][0][0][0]), int(corners[i][0][0][1] + 40)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                    # --- 畫紅色正方形框出目標位置 ---
+                    target_point = np.array([[opposite_x, opposite_y, 0.0]], dtype=np.float32)
+                    image_points, _ = cv2.projectPoints(
+                        target_point,
+                        np.array([[0.0], [0.0], [0.0]]),
+                        np.array([[0.0], [0.0], [0.0]]),
+                        self.camera_matrix,
+                        self.dist_coeffs
+                    )
+                    px, py = int(image_points[0][0][0]), int(image_points[0][0][1])
+                    cv2.rectangle(frame, (px - 5, py - 5), (px + 5, py + 5), (0, 0, 255), 2)
+                    cv2.putText(frame, "ID2 target", (px + 10, py - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
 
                 aruco.drawDetectedMarkers(frame, [corners[i]])
                 cv2.drawFrameAxes(frame, self.camera_matrix, self.dist_coeffs, rvec, tvec, self.marker_length * 0.5)
@@ -113,7 +121,6 @@ class ArucoFollowController(Node):
         target_theta = math.atan2(dy, dx)
         err_theta = (target_theta - follower_ori + math.pi) % (2 * math.pi) - math.pi
 
-        # 移動至目標位置
         if not self.target_reached:
             if distance > 0.05:
                 self.integral_dis += distance
@@ -127,7 +134,6 @@ class ArucoFollowController(Node):
                 self.target_reached = True
                 return [0, 0]
 
-        # 對齊角度
         elif not self.align_done:
             if abs(err_theta) > 0.05:
                 self.integral_theta += err_theta
