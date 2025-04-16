@@ -45,9 +45,9 @@ class ArucoFollowController(Node):
                                        [0.0, 0.0, 1.0]])
         self.dist_coeffs = np.array([8.27101136e-03, 2.35184440e-01, 4.10730291e-03, 3.48728526e-04, -1.40848823e+00])
 
+        self.target_pos = None
         self.target_reached = False
         self.align_done = False
-        self.target_pos = None
 
     def detect_aruco(self):
         ret, frame = self.cap.read()
@@ -114,6 +114,7 @@ class ArucoFollowController(Node):
         if follower_pos is None or follower_ori is None or self.target_pos is None:
             return [0, 0]
 
+        # 計算目標位置的距離與角度誤差
         dx = self.target_pos[0] - follower_pos[0]
         dy = self.target_pos[1] - follower_pos[1]
         distance = math.sqrt(dx**2 + dy**2)
@@ -121,12 +122,14 @@ class ArucoFollowController(Node):
         target_theta = math.atan2(dy, dx)
         err_theta = (target_theta - follower_ori + math.pi) % (2 * math.pi) - math.pi
 
+        # 階段 1: 移動到目標位置
         if not self.target_reached:
-            if distance > 0.05:
+            if distance > 0.05:  # 距離閾值
                 self.integral_dis += distance
                 derivative_dis = distance - self.prev_err_dis
                 self.prev_err_dis = distance
 
+                # 只控制線速度，忽略角速度
                 linear_pwm = self.Kp_linear * distance + self.Ki_linear * self.integral_dis + self.Kd_linear * derivative_dis
                 angular_pwm = 0
             else:
@@ -134,12 +137,14 @@ class ArucoFollowController(Node):
                 self.target_reached = True
                 return [0, 0]
 
+        # 階段 2: 轉向對齊
         elif not self.align_done:
-            if abs(err_theta) > 0.05:
+            if abs(err_theta) > 0.05:  # 角度閾值
                 self.integral_theta += err_theta
                 derivative_theta = err_theta - self.prev_err_theta
                 self.prev_err_theta = err_theta
 
+                # 只控制角速度，忽略線速度
                 linear_pwm = 0
                 angular_pwm = self.Kp_angular * err_theta + self.Ki_angular * self.integral_theta + self.Kd_angular * derivative_theta
             else:
@@ -149,19 +154,24 @@ class ArucoFollowController(Node):
         else:
             return [0, 0]
 
+        # 計算左右輪 PWM 值
         left_pwm = int(np.clip(linear_pwm - angular_pwm, -self.max_pwm_value, self.max_pwm_value))
         right_pwm = int(np.clip(linear_pwm + angular_pwm, -self.max_pwm_value, self.max_pwm_value))
 
+        # 限制 PWM 變化步長
         left_pwm = int(np.clip(left_pwm, self.prev_left_pwm - self.max_pwm_step, self.prev_left_pwm + self.max_pwm_step))
         right_pwm = int(np.clip(right_pwm, self.prev_right_pwm - self.max_pwm_step, self.prev_right_pwm + self.max_pwm_step))
 
+        # 平滑處理
         alpha = 0.5
         left_pwm = int(alpha * left_pwm + (1 - alpha) * self.prev_left_pwm)
         right_pwm = int(alpha * right_pwm + (1 - alpha) * self.prev_right_pwm)
 
+        # 更新上一個 PWM 值
         self.prev_left_pwm = left_pwm
         self.prev_right_pwm = right_pwm
 
+        # 應用死區處理
         left_pwm = self.apply_deadzone(left_pwm)
         right_pwm = self.apply_deadzone(right_pwm)
 
