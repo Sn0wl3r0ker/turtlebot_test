@@ -123,19 +123,14 @@ class ArucoFollowController(Node):
     def compute_pwm(self, follower_pos, follower_ori):
         if follower_pos is None or follower_ori is None or self.target_pos is None:
             return [0, 0]
-
         dx = self.target_pos[0] - follower_pos[0]
         dy = self.target_pos[1] - follower_pos[1]
         distance = math.sqrt(dx**2 + dy**2)
-
-        # 目標方向
         target_theta = math.atan2(dy, dx)
         err_theta_to_target = (target_theta - follower_ori + math.pi) % (2 * math.pi) - math.pi
-
         # 目標到達後，對齊 y 軸
         if hasattr(self, 'final_align') and self.final_align:
-            # 只做第二次轉向，對齊 y 軸
-            if abs(self.leader_yaw_to_world) > 0.12:  # 容忍角度放寬，減少甩動
+            if abs(self.leader_yaw_to_world) > 0.12:
                 self.integral_theta += self.leader_yaw_to_world
                 derivative_theta = self.leader_yaw_to_world - self.prev_err_theta
                 self.prev_err_theta = self.leader_yaw_to_world
@@ -144,34 +139,31 @@ class ArucoFollowController(Node):
             else:
                 print("✅ 已完成最終對齊")
                 return [0, 0]
-        # 階段 1: 先轉向面向 target
         elif not self.target_reached:
-            if abs(err_theta_to_target) > 0.12:  # 容忍角度放寬，減少甩動
-                self.integral_theta += err_theta_to_target
-                derivative_theta = err_theta_to_target - self.prev_err_theta
-                self.prev_err_theta = err_theta_to_target
-                linear_pwm = 0
-                angular_pwm = self.Kp_angular * err_theta_to_target + self.Ki_angular * self.integral_theta + self.Kd_angular * derivative_theta
-            elif distance > 0.02:
-                # 轉向完成，開始前進
-                self.integral_dis += distance
-                derivative_dis = distance - self.prev_err_dis
-                self.prev_err_dis = distance
-                linear_pwm = self.Kp_linear * distance + self.Ki_linear * self.integral_dis + self.Kd_linear * derivative_dis
-                angular_pwm = 0
-            else:
-                print("✅ 已抵達目標位置，準備最終對齊")
+            # 只要距離夠近，直接進入最終對齊，不再原地轉向
+            if distance < 0.05:
+                print("✅ 距離已夠近，直接進入最終對齊")
                 self.target_reached = True
                 self.final_align = True
-                # 計算 y 軸對齊誤差
                 if hasattr(self, 'leader_ori') and self.leader_ori is not None:
                     self.leader_yaw_to_world = (self.leader_ori - follower_ori + math.pi) % (2 * math.pi) - math.pi
                 else:
                     self.leader_yaw_to_world = 0
                 return [0, 0]
+            if abs(err_theta_to_target) > 0.12:
+                self.integral_theta += err_theta_to_target
+                derivative_theta = err_theta_to_target - self.prev_err_theta
+                self.prev_err_theta = err_theta_to_target
+                linear_pwm = 0
+                angular_pwm = self.Kp_angular * err_theta_to_target + self.Ki_angular * self.integral_theta + self.Kd_angular * derivative_theta
+            else:
+                self.integral_dis += distance
+                derivative_dis = distance - self.prev_err_dis
+                self.prev_err_dis = distance
+                linear_pwm = self.Kp_linear * distance + self.Ki_linear * self.integral_dis + self.Kd_linear * derivative_dis
+                angular_pwm = 0
         else:
             return [0, 0]
-
         left_pwm = int(np.clip(linear_pwm - angular_pwm, -self.max_pwm_value, self.max_pwm_value))
         right_pwm = int(np.clip(linear_pwm + angular_pwm, -self.max_pwm_value, self.max_pwm_value))
         left_pwm = int(np.clip(left_pwm, self.prev_left_pwm - self.max_pwm_step, self.prev_left_pwm + self.max_pwm_step))
