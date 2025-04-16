@@ -10,16 +10,16 @@ class ArucoFollowController(Node):
     def __init__(self):
         super().__init__('aruco_follow_controller')
 
-        self.pwm_pub = self.create_publisher(Int16MultiArray, '/set_pwm', 5)
-        self.timer = self.create_timer(0.15, self.control_loop)
+        self.pwm_pub = self.create_publisher(Int16MultiArray, '/set_pwm', 1)
+        self.timer = self.create_timer(0.05, self.control_loop)
 
-        self.Kp_linear = 400.0
-        self.Ki_linear = 50.0
-        self.Kd_linear = 0.05
+        self.Kp_linear = 60.0  # 合理線速度比例增益
+        self.Ki_linear = 0.0   # 穩定性優先，先不用積分
+        self.Kd_linear = 5.0   # 適度微分
 
-        self.Kp_angular = 50.0
-        self.Ki_angular = 5.0
-        self.Kd_angular = 0.05
+        self.Kp_angular = 80.0 # 角度控制要靈敏一點
+        self.Ki_angular = 0.0
+        self.Kd_angular = 8.0
 
         self.prev_err_dis = 0.0
         self.prev_err_theta = 0.0
@@ -128,6 +128,8 @@ class ArucoFollowController(Node):
         distance = math.sqrt(dx**2 + dy**2)
         target_theta = math.atan2(dy, dx)
         err_theta_to_target = (target_theta - follower_ori + math.pi) % (2 * math.pi) - math.pi
+        # debug print
+        print(f"[DEBUG] follower_pos: {follower_pos}, target_pos: {self.target_pos}, distance: {distance:.4f}, err_theta_to_target: {err_theta_to_target:.4f}")
         # 目標到達後，對齊 y 軸
         if hasattr(self, 'final_align') and self.final_align:
             if abs(self.leader_yaw_to_world) > 0.12:
@@ -141,7 +143,7 @@ class ArucoFollowController(Node):
                 return [0, 0]
         elif not self.target_reached:
             # 只要距離夠近，直接進入最終對齊，不再原地轉向
-            if distance < 0.05:
+            if distance < 0.01:
                 print("✅ 距離已夠近，直接進入最終對齊")
                 self.target_reached = True
                 self.final_align = True
@@ -175,6 +177,7 @@ class ArucoFollowController(Node):
         self.prev_right_pwm = right_pwm
         left_pwm = self.apply_deadzone(left_pwm)
         right_pwm = self.apply_deadzone(right_pwm)
+        print(f"[DEBUG] linear_pwm: {linear_pwm:.2f}, angular_pwm: {angular_pwm:.2f}, left_pwm: {left_pwm}, right_pwm: {right_pwm}")
         return [left_pwm, right_pwm]
 
     def control_loop(self):
