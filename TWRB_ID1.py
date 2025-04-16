@@ -10,8 +10,8 @@ class ArucoFollowController(Node):
     def __init__(self):
         super().__init__('aruco_follow_controller')
 
-        self.pwm_pub = self.create_publisher(Int16MultiArray, '/set_pwm', 1)
-        self.timer = self.create_timer(0.1, self.control_loop)
+        self.pwm_pub = self.create_publisher(Int16MultiArray, '/set_pwm', 5)
+        self.timer = self.create_timer(0.15, self.control_loop)
 
         self.Kp_linear = 400.0
         self.Ki_linear = 50.0
