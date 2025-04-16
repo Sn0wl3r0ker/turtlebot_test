@@ -30,7 +30,7 @@ class ArucoFollowController(Node):
         self.prev_right_pwm = 0
         self.max_pwm_step = 5
         self.max_pwm_value = 50
-        self.min_pwm_threshold = 30
+        self.min_pwm_threshold = 10  # 原本為30，改為10，讓小誤差時仍能動作
 
         self.cap = cv2.VideoCapture(2)
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_50)
@@ -125,7 +125,7 @@ class ArucoFollowController(Node):
 
         # 階段 1: 移動到目標位置
         if not self.target_reached:
-            if distance > 0.05:  # 距離閾值
+            if distance > 0.02:  # 距離閾值從0.05改為0.02
                 self.integral_dis += distance
                 derivative_dis = distance - self.prev_err_dis
                 self.prev_err_dis = distance
