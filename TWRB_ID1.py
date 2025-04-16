@@ -187,6 +187,8 @@ class ArucoFollowController(Node):
             cv2.waitKey(1)
 
         pwm_values = self.compute_pwm(follower_pos, follower_ori)
+        # PWM 輸出放大 3 倍
+        pwm_values = [v * 3 for v in pwm_values]
         pwm_msg = Int16MultiArray()
         pwm_msg.data = pwm_values
         self.pwm_pub.publish(pwm_msg)
