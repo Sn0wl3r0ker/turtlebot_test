@@ -109,8 +109,16 @@ class ArucoFollowController(Node):
     def apply_deadzone(self, pwm):
         if pwm == 0:
             return 0
-        # 只要不是0，強制補償到最小可動值
-        return int(math.copysign(max(abs(pwm), self.min_pwm_threshold), pwm))
+        abs_pwm = abs(pwm)
+        # 角度/距離誤差小時，PWM 也小一點，減少甩動
+        if abs_pwm < self.min_pwm_threshold:
+            if abs_pwm > 20:
+                return int(math.copysign(20, pwm))
+            elif abs_pwm > 10:
+                return int(math.copysign(10, pwm))
+            else:
+                return 0
+        return int(math.copysign(self.min_pwm_threshold, pwm))
 
     def compute_pwm(self, follower_pos, follower_ori):
         if follower_pos is None or follower_ori is None or self.target_pos is None:
@@ -127,7 +135,7 @@ class ArucoFollowController(Node):
         # 目標到達後，對齊 y 軸
         if hasattr(self, 'final_align') and self.final_align:
             # 只做第二次轉向，對齊 y 軸
-            if abs(self.leader_yaw_to_world) > 0.05:
+            if abs(self.leader_yaw_to_world) > 0.12:  # 容忍角度放寬，減少甩動
                 self.integral_theta += self.leader_yaw_to_world
                 derivative_theta = self.leader_yaw_to_world - self.prev_err_theta
                 self.prev_err_theta = self.leader_yaw_to_world
@@ -138,7 +146,7 @@ class ArucoFollowController(Node):
                 return [0, 0]
         # 階段 1: 先轉向面向 target
         elif not self.target_reached:
-            if abs(err_theta_to_target) > 0.05:
+            if abs(err_theta_to_target) > 0.12:  # 容忍角度放寬，減少甩動
                 self.integral_theta += err_theta_to_target
                 derivative_theta = err_theta_to_target - self.prev_err_theta
                 self.prev_err_theta = err_theta_to_target
