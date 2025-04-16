@@ -106,10 +106,10 @@ class ArucoFollowController(Node):
         return follower_pos, follower_ori, leader_pos, leader_ori, frame
 
     def apply_deadzone(self, pwm):
-        # 只有超過 deadzone 才補償，否則直接設為 0，允許一正一負原地轉向
-        if abs(pwm) < self.min_pwm_threshold:
+        if pwm == 0:
             return 0
-        return pwm
+        # 只要不是0，強制補償到最小可動值
+        return int(math.copysign(max(abs(pwm), self.min_pwm_threshold), pwm))
 
     def compute_pwm(self, follower_pos, follower_ori):
         if follower_pos is None or follower_ori is None or self.target_pos is None:
