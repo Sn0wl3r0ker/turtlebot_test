@@ -15,11 +15,11 @@ class ArucoFollowController(Node):
 
         self.Kp_linear = 400.0
         self.Ki_linear = 50.0
-        self.Kd_linear = 5.0
+        self.Kd_linear = 0.05
 
         self.Kp_angular = 50.0
-        self.Ki_angular = 50.0
-        self.Kd_angular = 10.0
+        self.Ki_angular = 5.0
+        self.Kd_angular = 0.05
 
         self.prev_err_dis = 0.0
         self.prev_err_theta = 0.0
