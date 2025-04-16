@@ -14,11 +14,11 @@ class ArucoFollowController(Node):
         self.timer = self.create_timer(0.1, self.control_loop)
 
         self.Kp_linear = 400.0
-        self.Ki_linear = 0.5
+        self.Ki_linear = 50.0
         self.Kd_linear = 5.0
 
         self.Kp_angular = 50.0
-        self.Ki_angular = 0.0
+        self.Ki_angular = 50.0
         self.Kd_angular = 10.0
 
         self.prev_err_dis = 0.0
