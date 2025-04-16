@@ -1,90 +1,186 @@
-#!/usr/bin/env python3
-import rospy
+import rclpy
+from rclpy.node import Node
 from std_msgs.msg import Int16MultiArray
 import cv2
 import numpy as np
 import math
 from cv2 import aruco
 
-class Follower:
+class ArucoFollowController(Node):
     def __init__(self):
-        rospy.init_node('aruco_follower', anonymous=True)
-        self.pub = rospy.Publisher('/set_pwm', Int16MultiArray, queue_size=1)
+        super().__init__('aruco_follow_controller')
+
+        self.pwm_pub = self.create_publisher(Int16MultiArray, '/set_pwm', 1)
+        self.timer = self.create_timer(0.1, self.control_loop)
+
+        self.Kp_linear = 40.0
+        self.Ki_linear = 0.01
+        self.Kd_linear = 5.0
+
+        self.Kp_angular = 50.0
+        self.Ki_angular = 0.0
+        self.Kd_angular = 10.0
+
+        self.prev_err_dis = 0.0
+        self.prev_err_theta = 0.0
+        self.integral_dis = 0.0
+        self.integral_theta = 0.0
+
+        self.prev_left_pwm = 0
+        self.prev_right_pwm = 0
+        self.max_pwm_step = 5
+        self.max_pwm_value = 50
+        self.min_pwm_threshold = 30
 
         self.cap = cv2.VideoCapture(2)
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_50)
         self.aruco_params = aruco.DetectorParameters()
 
-        self.target_id = 1  # 追蹤第一台車
-        self.marker_length = 0.06  # 根據你的設定
+        self.follower_id = 2
+        self.leader_id = 1
+        self.marker_length = 0.06
 
         self.camera_matrix = np.array([[641.2391308, 0., 316.90188846],
                                        [0., 639.76069811, 227.92853594],
                                        [0.0, 0.0, 1.0]])
         self.dist_coeffs = np.array([8.27101136e-03, 2.35184440e-01, 4.10730291e-03, 3.48728526e-04, -1.40848823e+00])
 
-        self.Kp_dis = 40
-        self.Kp_angle = 25
-        self.desired_distance = 0.5  # 距離維持 50cm
+        self.target_reached = False
+        self.align_done = False
+        self.target_pos = None  # (x, y)
 
-        self.loop()
+    def detect_aruco(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            return None, None, None, frame
 
-    def loop(self):
-        rate = rospy.Rate(10)
-        while not rospy.is_shutdown():
-            ret, frame = self.cap.read()
-            if not ret:
-                continue
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        corners, ids, _ = aruco.detectMarkers(gray, self.aruco_dict, parameters=self.aruco_params)
 
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            corners, ids, _ = aruco.detectMarkers(gray, self.aruco_dict, parameters=self.aruco_params)
+        follower_pos = None
+        follower_ori = None
+        leader_pos = None
+        leader_ori = None
 
-            if ids is not None:
-                for i, marker_id in enumerate(ids.flatten()):
-                    if marker_id == self.target_id:
-                        rvec, tvec, _ = aruco.estimatePoseSingleMarkers(
-                            corners[i], self.marker_length, self.camera_matrix, self.dist_coeffs
-                        )
-                        x, y, z = tvec[0][0]
+        if ids is not None:
+            for i, marker_id in enumerate(ids.flatten()):
+                rvec, tvec, _ = aruco.estimatePoseSingleMarkers(
+                    corners[i], self.marker_length, self.camera_matrix, self.dist_coeffs
+                )
+                x, y, z = tvec[0][0]
 
-                        distance_error = math.sqrt(x**2 + z**2) - self.desired_distance
-                        angle_error = math.atan2(x, z)
+                rmat, _ = cv2.Rodrigues(rvec)
+                y_axis = rmat @ np.array([0, 1, 0])
+                theta = math.atan2(y_axis[0], y_axis[1])
 
-                        linear = self.Kp_dis * distance_error
-                        angular = self.Kp_angle * angle_error
+                if marker_id == self.follower_id:
+                    follower_pos = (x, y, z)
+                    follower_ori = theta
+                elif marker_id == self.leader_id:
+                    leader_pos = (x, y, z)
+                    leader_ori = theta
+                    print(f"📌 ID1 ArUco 相對位置: x={x:.2f}, y={y:.2f}, z={z:.2f}")
 
-                        left_pwm = int(linear - angular)
-                        right_pwm = int(linear + angular)
+                    # 計算目標位置：y 軸反方向 + 0.15m
+                    opposite_y = y - 0.15 * math.cos(theta)
+                    opposite_x = x - 0.15 * math.sin(theta)
+                    self.target_pos = (opposite_x, opposite_y)
 
-                        # 限制 PWM
-                        left_pwm = max(min(left_pwm, 60), -60)
-                        right_pwm = max(min(right_pwm, 60), -60)
+                    print(f"🎯 ID2 target: x={opposite_x:.2f}, y={opposite_y:.2f}")
 
-                        # Deadzone 補償
-                        def apply_deadzone(pwm):
-                            if abs(pwm) < 25:
-                                return 0
-                            return pwm
-                        left_pwm = apply_deadzone(left_pwm)
-                        right_pwm = apply_deadzone(right_pwm)
+                    # 畫出目標位置標示
+                    cv2.putText(frame, "ID2 target", (int(corners[i][0][0][0]), int(corners[i][0][0][1] + 40)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
-                        msg = Int16MultiArray()
-                        msg.data = [left_pwm, right_pwm]
-                        self.pub.publish(msg)
+                aruco.drawDetectedMarkers(frame, [corners[i]])
+                cv2.drawFrameAxes(frame, self.camera_matrix, self.dist_coeffs, rvec, tvec, self.marker_length * 0.5)
 
-                        cv2.drawFrameAxes(frame, self.camera_matrix, self.dist_coeffs, rvec, tvec, 0.03)
-                        break  # 找到就不再處理其他 ID
+        return follower_pos, follower_ori, leader_pos, leader_ori, frame
 
-            cv2.imshow("Follower View", frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-            rate.sleep()
+    def apply_deadzone(self, pwm):
+        if pwm == 0:
+            return 0
+        return int(math.copysign(max(abs(pwm), self.min_pwm_threshold), pwm))
 
-        self.cap.release()
-        cv2.destroyAllWindows()
+    def compute_pwm(self, follower_pos, follower_ori):
+        if follower_pos is None or follower_ori is None or self.target_pos is None:
+            return [0, 0]
+
+        dx = self.target_pos[0] - follower_pos[0]
+        dy = self.target_pos[1] - follower_pos[1]
+        distance = math.sqrt(dx**2 + dy**2)
+
+        target_theta = math.atan2(dy, dx)
+        err_theta = (target_theta - follower_ori + math.pi) % (2 * math.pi) - math.pi
+
+        # 移動至目標位置
+        if not self.target_reached:
+            if distance > 0.05:
+                self.integral_dis += distance
+                derivative_dis = distance - self.prev_err_dis
+                self.prev_err_dis = distance
+
+                linear_pwm = self.Kp_linear * distance + self.Ki_linear * self.integral_dis + self.Kd_linear * derivative_dis
+                angular_pwm = 0
+            else:
+                print("✅ 已抵達目標位置")
+                self.target_reached = True
+                return [0, 0]
+
+        # 對齊角度
+        elif not self.align_done:
+            if abs(err_theta) > 0.05:
+                self.integral_theta += err_theta
+                derivative_theta = err_theta - self.prev_err_theta
+                self.prev_err_theta = err_theta
+
+                linear_pwm = 0
+                angular_pwm = self.Kp_angular * err_theta + self.Ki_angular * self.integral_theta + self.Kd_angular * derivative_theta
+            else:
+                print("✅ 已完成角度對齊")
+                self.align_done = True
+                return [0, 0]
+        else:
+            return [0, 0]
+
+        left_pwm = int(np.clip(linear_pwm - angular_pwm, -self.max_pwm_value, self.max_pwm_value))
+        right_pwm = int(np.clip(linear_pwm + angular_pwm, -self.max_pwm_value, self.max_pwm_value))
+
+        left_pwm = int(np.clip(left_pwm, self.prev_left_pwm - self.max_pwm_step, self.prev_left_pwm + self.max_pwm_step))
+        right_pwm = int(np.clip(right_pwm, self.prev_right_pwm - self.max_pwm_step, self.prev_right_pwm + self.max_pwm_step))
+
+        alpha = 0.5
+        left_pwm = int(alpha * left_pwm + (1 - alpha) * self.prev_left_pwm)
+        right_pwm = int(alpha * right_pwm + (1 - alpha) * self.prev_right_pwm)
+
+        self.prev_left_pwm = left_pwm
+        self.prev_right_pwm = right_pwm
+
+        left_pwm = self.apply_deadzone(left_pwm)
+        right_pwm = self.apply_deadzone(right_pwm)
+
+        return [left_pwm, right_pwm]
+
+    def control_loop(self):
+        follower_pos, follower_ori, leader_pos, leader_ori, frame = self.detect_aruco()
+        if frame is not None:
+            cv2.imshow("Aruco Follow", frame)
+            cv2.waitKey(1)
+
+        pwm_values = self.compute_pwm(follower_pos, follower_ori)
+        pwm_msg = Int16MultiArray()
+        pwm_msg.data = pwm_values
+        self.pwm_pub.publish(pwm_msg)
+        print(f"🔧 PWM: {pwm_values}")
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = ArucoFollowController()
+    rclpy.spin(node)
+    node.cap.release()
+    cv2.destroyAllWindows()
+    node.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == '__main__':
-    try:
-        Follower()
-    except rospy.ROSInterruptException:
-        pass
+    main()
