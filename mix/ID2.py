@@ -32,9 +32,10 @@ class ArucoPWMController:
         self.dist_coeffs = np.array([8.27101136e-03, 2.35184440e-01, 4.10730291e-03, 3.48728526e-04, -1.40848823e+00])
 
         self.robot_id = 2
-        self.target_id = 1  # ID1 為目標
+        self.target_id = 1
         self.aligning = False
         self.target_orientation = None
+        self.stop_sent = False  # ✅ 加入對齊停止旗標
 
     def process(self, frame, corners, ids):
         robot_pos, robot_orient, target_pos = None, None, None
@@ -54,19 +55,16 @@ class ArucoPWMController:
                     cv2.drawFrameAxes(frame, self.camera_matrix, self.dist_coeffs, rvec, tvec.reshape(3, 1), self.marker_length * 0.5)
 
                 elif marker_id == self.target_id:
-                    offset = -0.3  # 距離目標 30cm 偏移
-                    offset_vec = rmat @ np.array([0, offset, 0])
+                    offset_vec = rmat @ np.array([0, -0.3, 0])
                     target_pos = tuple(tvec + offset_vec)
-
                     self.target_orientation = theta
-                    # 畫出目標2在畫面中的投影
+
                     image_point = np.array([[target_pos]], dtype=np.float32)
                     proj, _ = cv2.projectPoints(image_point, np.zeros((3,1)), np.zeros((3,1)), self.camera_matrix, self.dist_coeffs)
                     px, py = int(proj[0][0][0]), int(proj[0][0][1])
                     cv2.circle(frame, (px, py), 8, (0, 255, 0), 2)
                     cv2.putText(frame, "Target2", (px + 5, py - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-        # 沒有追蹤到目標
         if target_pos is None:
             print("⚠️ 無法偵測 ID1 目標")
             return
@@ -97,11 +95,17 @@ class ArucoPWMController:
                 linear_output = 0.0
 
                 if abs(err_theta) < 0.05:
-                    print("✅ ID2 對齊完成")
-                    return [0, 0]
+                    if not self.stop_sent:
+                        print("✅ ID2 對齊完成，傳送一次停止PWM")
+                        self.stop_sent = True
+                        return [0, 0]
+                    else:
+                        return [0, 0]
             else:
                 return [0, 0]
         else:
+            self.stop_sent = False  # ✅ 若有移動，重新允許送停止PWM
+
             target_angle = math.atan2(dx, dy)
             err_theta = (target_angle - robot_orient + math.pi) % (2 * math.pi) - math.pi
 
