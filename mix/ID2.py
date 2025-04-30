@@ -82,7 +82,7 @@ class ArucoPWMController:
         dy = target_pos[1] - robot_pos[1]
         err_dis = math.sqrt(dx ** 2 + dy ** 2)
 
-        if err_dis < 0.05:
+        if err_dis < 0.1:
             if self.target_orientation is not None:
                 err_theta = (self.target_orientation - robot_orient + math.pi) % (2 * math.pi) - math.pi
                 self.integral_theta += err_theta
@@ -94,7 +94,7 @@ class ArucoPWMController:
                                   self.Kd_angular * derivative_theta)
                 linear_output = 0.0
 
-                if abs(err_theta) < 0.05:
+                if abs(err_theta) < 0.75:
                     if not self.stop_sent:
                         print("✅ ID2 對齊完成，傳送一次停止PWM")
                         self.stop_sent = True
