@@ -62,7 +62,8 @@ class ArucoPWMController:
                     image_point = np.array([[target_pos]], dtype=np.float32)
                     proj, _ = cv2.projectPoints(image_point, np.zeros((3,1)), np.zeros((3,1)), self.camera_matrix, self.dist_coeffs)
                     px, py = int(proj[0][0][0]), int(proj[0][0][1])
-                    cv2.circle(frame, (px, py), 8, (0, 255, 0), 2)
+                    center = tuple(int(float(v)) for v in proj[0][0][:2])
+                    cv2.circle(frame, center, 8, (0, 255, 0), 2)
                     cv2.putText(frame, "Target2", (px + 5, py - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
         if target_pos is None:
