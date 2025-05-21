@@ -85,8 +85,6 @@ class DualArucoMain(Node):
             else:
                 print(f"❗ frame1.shape={self.image1.shape}, frame2.shape={self.image2.shape}，無法合併")
         # 後續處理
-        cv2.imshow("Combined Aruco Frame", combined)
-        cv2.waitKey(1)
 
     def cleanup(self):
         cv2.destroyAllWindows()
