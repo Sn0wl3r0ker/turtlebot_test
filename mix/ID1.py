@@ -59,21 +59,30 @@ class ArucoPIDController:
     def process(self, frame, corners, ids, offset_x=0):
         robot_pos = None
         robot_orientation = None
-
+        h, w = frame.shape[:2]
         if ids is not None:
             for i, marker_id in enumerate(ids.flatten()):
                 if marker_id == self.robot_id:
                     rvec, tvec, _ = aruco.estimatePoseSingleMarkers(
                         corners[i], self.marker_length, self.camera_matrix, self.dist_coeffs)
-                    tvec = tvec[0][0].copy()
-                    tvec[0] += offset_x  # x 座標加上 offset
+                    tvec = tvec[0][0]
                     rmat, _ = cv2.Rodrigues(rvec)
                     y_axis = rmat @ np.array([0, 1, 0])
                     theta = math.atan2(y_axis[0], y_axis[1])
                     robot_pos = tvec
                     robot_orientation = theta
-
-                    cv2.drawFrameAxes(frame, self.camera_matrix, self.dist_coeffs, rvec, tvec.reshape(3,1), self.marker_length * 0.5)
+                    # 投影到像素座標再加 offset_x
+                    proj, _ = cv2.projectPoints(np.array([[tvec]], dtype=np.float32), rvec, tvec, self.camera_matrix, self.dist_coeffs)
+                    if (
+                        proj is not None and
+                        proj.shape == (1, 1, 2) and
+                        np.isfinite(proj[0][0][0]) and
+                        np.isfinite(proj[0][0][1])
+                    ):
+                        px, py = int(proj[0][0][0]) + offset_x, int(proj[0][0][1])
+                        if 0 <= px < w and 0 <= py < h:
+                            cv2.circle(frame, (px, py), 8, (255, 0, 0), 2)
+                            cv2.putText(frame, "Robot1", (px + 5, py - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
         # 畫出目標像素點
         cv2.circle(frame, (int(self.target_pixel[0]), int(self.target_pixel[1])), 10, (0, 0, 255), 2)
