@@ -62,10 +62,19 @@ class ArucoPWMController:
 
                     image_point = np.array([[target_pos]], dtype=np.float32)
                     proj, _ = cv2.projectPoints(image_point, np.zeros((3,1)), np.zeros((3,1)), self.camera_matrix, self.dist_coeffs)
-                    px, py = int(proj[0][0][0]), int(proj[0][0][1])
-                    center = (px,py)
-                    cv2.circle(frame, center, 8, (0, 255, 0), 2)
-                    cv2.putText(frame, "Target2", (px + 5, py - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    print("proj shape:", proj.shape, "proj dtype:", proj.dtype, "proj value:", proj)
+                    if (
+                        proj is not None and
+                        proj.shape == (1, 1, 2) and
+                        np.isfinite(proj[0][0][0]) and
+                        np.isfinite(proj[0][0][1])
+                    ):
+                        px, py = int(proj[0][0][0]), int(proj[0][0][1])
+                        center = (px, py)
+                        cv2.circle(frame, center, 8, (0, 255, 0), 2)
+                        cv2.putText(frame, "Target2", (px + 5, py - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    else:
+                        print("⚠️ proj 投影結果異常，略過畫圓")
 
         if target_pos is None:
             print("⚠️ 無法偵測 ID1 目標")
