@@ -39,8 +39,6 @@ class ArucoPIDController:
         try:
             x = float(input("輸入目標 X 像素座標 (0–640): "))
             y = float(input("輸入目標 Y 像素座標 (0–480): "))
-            if not (0 <= x <= 640 and 0 <= y <= 480):
-                raise ValueError
             self.target_pixel = (x, y)
             print(f"[INFO] 目標座標設為: {self.target_pixel}")
         except ValueError:
