@@ -21,7 +21,7 @@ class DualArucoMain(Node):
         self.sub2 = Subscriber(self, Image, '/camera2/image_raw')
         self.ts = ApproximateTimeSynchronizer([self.sub1, self.sub2], queue_size=5, slop=0.1)
         print(f"[INFO] before ts.registerCallback")
-        self.ts.registerCallback(self.image_callback(self.controller_id1.image_callback, self.controller_id2.image_callback))
+        self.ts.registerCallback(self.image_callback)
         print(f"[INFO] after ts.registerCallback")
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_50)
         self.aruco_params = aruco.DetectorParameters()
