@@ -82,7 +82,7 @@ class ArucoPIDController:
         # 若沒偵測到則停止
         if robot_pos is None or robot_orientation is None:
             self.publish_stop()
-            return
+            return None
 
         # 控制計算
         tx, ty, tz = self.pixel_to_camera(*self.target_pixel, self.fixed_z)
@@ -112,6 +112,7 @@ class ArucoPIDController:
         twist.linear.x = max(min(linear, 0.2), -0.2)
         twist.angular.z = max(min(angular, 1.0), -1.0)
         self.cmd_pub.publish(twist)
+        return robot_pos
 
     def publish_stop(self):
         stop = Twist()

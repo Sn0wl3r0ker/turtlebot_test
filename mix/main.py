@@ -35,7 +35,7 @@ class DualArucoMain(Node):
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_50)
         self.aruco_params = aruco.DetectorParameters()
     def image1_callback(self, img_msg1):
-        print("收到 camera1 影像訊息")
+        # print("收到 camera1 影像訊息")
         # 將影像訊息轉成 OpenCV 格式並存入 self.image1
         try:
             self.image1 = self.bridge.imgmsg_to_cv2(img_msg1, desired_encoding='bgr8')
@@ -44,7 +44,7 @@ class DualArucoMain(Node):
             self.image1 = None
         self.try_show_combined()
     def image2_callback(self, img_msg2):
-        print("收到 camera2 影像訊息")
+        # print("收到 camera2 影像訊息")
         # 將影像訊息轉成 OpenCV 格式並存入 self.image2
         try:
             self.image2 = self.bridge.imgmsg_to_cv2(img_msg2, desired_encoding='bgr8')
@@ -56,14 +56,17 @@ class DualArucoMain(Node):
         if self.image1 is not None and self.image2 is not None:
             if self.image1.shape == self.image2.shape:
                 combined = cv2.hconcat([self.image1, self.image2])
-                print("合併後影像 shape:", combined.shape)
                 # 進行 ArUco 偵測
                 gray = cv2.cvtColor(combined, cv2.COLOR_BGR2GRAY)
                 corners, ids, _ = aruco.detectMarkers(gray, self.aruco_dict, parameters=self.aruco_params)
-                # 將 frame, corners, ids 分別傳入兩個控制器處理
-                self.controller_id1.process(combined, corners, ids)
-                self.controller_id2.process(combined, corners, ids)
-                # 顯示畫面（包含目標點與追蹤點標示）
+                # 取得座標
+                id1_pos = self.controller_id1.process(combined, corners, ids)
+                id2_pos = self.controller_id2.process(combined, corners, ids)
+                # 印出 shape 與座標
+                print(f"畫面 shape: {combined.shape}")
+                print(f"ID1 位置: {id1_pos}")
+                print(f"ID2 位置: {id2_pos}")
+                # 顯示畫面
                 cv2.imshow("Aruco Shared Frame", combined)
                 cv2.waitKey(1)
             else:

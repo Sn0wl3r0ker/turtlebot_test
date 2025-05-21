@@ -68,12 +68,13 @@ class ArucoPWMController:
 
         if target_pos is None:
             print("⚠️ 無法偵測 ID1 目標")
-            return
+            return None
 
         pwm_values = self.compute_pwm(robot_pos, robot_orient, target_pos)
         pwm_msg = Int16MultiArray()
         pwm_msg.data = pwm_values
         self.pwm_pub.publish(pwm_msg)
+        return robot_pos
 
     def compute_pwm(self, robot_pos, robot_orient, target_pos):
         if robot_pos is None or robot_orient is None or target_pos is None:
