@@ -17,15 +17,24 @@ class DualArucoMain(Node):
         self.controller_id1.set_target_pixel()
 
         # 同步兩相機 topic
-        self.sub1 = Subscriber(self, Image, '/camera1/image_raw')
-        self.sub2 = Subscriber(self, Image, '/camera2/image_raw')
-        self.ts = ApproximateTimeSynchronizer([self.sub1, self.sub2], queue_size=5, slop=0.1)
+        # 分別訂閱兩個相機
+        self.sub1 = self.create_subscription(
+            Image, '/camera1/image_raw', self.image1_callback, 10)
+        self.sub2 = self.create_subscription(
+            Image, '/camera2/image_raw', self.image2_callback, 10)
+        # self.sub1 = Subscriber(self, Image, '/camera1/image_raw')
+        # self.sub2 = Subscriber(self, Image, '/camera2/image_raw')
+        # self.ts = ApproximateTimeSynchronizer([self.sub1, self.sub2], queue_size=5, slop=0.1)
+        
         print(f"[INFO] before ts.registerCallback")
         self.ts.registerCallback(self.image_callback)
         print(f"[INFO] after ts.registerCallback")
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_50)
         self.aruco_params = aruco.DetectorParameters()
-
+    def image1_callback(self, img_msg1):
+        print("收到 camera1 影像訊息")
+    def image2_callback(self, img_msg2):
+        print("收到 camera2 影像訊息")
     def image_callback(self, img_msg1, img_msg2):
         # 轉為 OpenCV 格式
         print("收到兩個影像訊息")
