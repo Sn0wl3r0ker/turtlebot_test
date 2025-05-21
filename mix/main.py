@@ -16,7 +16,10 @@ class DualArucoMain(Node):
         self.controller_id2 = ArucoPWMController(self)
         self.controller_id1.set_target_pixel()
 
-        # 同步兩相機 topic
+        # 新增影像暫存變數
+        self.image1 = None
+        self.image2 = None
+
         # 分別訂閱兩個相機
         self.sub1 = self.create_subscription(
             Image, '/camera1/image_raw', self.image1_callback, 10)
@@ -33,9 +36,21 @@ class DualArucoMain(Node):
         self.aruco_params = aruco.DetectorParameters()
     def image1_callback(self, img_msg1):
         print("收到 camera1 影像訊息")
+        # 將影像訊息轉成 OpenCV 格式並存入 self.image1
+        try:
+            self.image1 = self.bridge.imgmsg_to_cv2(img_msg1, desired_encoding='bgr8')
+        except Exception as e:
+            print("❌ camera1 cv_bridge 轉換失敗:", e)
+            self.image1 = None
         self.try_show_combined()
     def image2_callback(self, img_msg2):
         print("收到 camera2 影像訊息")
+        # 將影像訊息轉成 OpenCV 格式並存入 self.image2
+        try:
+            self.image2 = self.bridge.imgmsg_to_cv2(img_msg2, desired_encoding='bgr8')
+        except Exception as e:
+            print("❌ camera2 cv_bridge 轉換失敗:", e)
+            self.image2 = None
         self.try_show_combined()
     # def image_callback(self, img_msg1, img_msg2):
     #     # 轉為 OpenCV 格式
