@@ -42,6 +42,7 @@ class ArucoPIDController:
             if not (0 <= x <= 640 and 0 <= y <= 480):
                 raise ValueError
             self.target_pixel = (x, y)
+            print(f"[INFO] 目標座標設為: {self.target_pixel}")
         except ValueError:
             print("⚠️ 無效輸入，使用預設值 (320, 240)")
             self.target_pixel = (320.0, 240.0)
