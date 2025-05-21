@@ -33,32 +33,42 @@ class DualArucoMain(Node):
         self.aruco_params = aruco.DetectorParameters()
     def image1_callback(self, img_msg1):
         print("收到 camera1 影像訊息")
+        self.try_show_combined()
     def image2_callback(self, img_msg2):
         print("收到 camera2 影像訊息")
-    def image_callback(self, img_msg1, img_msg2):
-        # 轉為 OpenCV 格式
-        print("收到兩個影像訊息")
-        try:
-            frame1 = self.bridge.imgmsg_to_cv2(img_msg1, desired_encoding='bgr8')
-            frame2 = self.bridge.imgmsg_to_cv2(img_msg2, desired_encoding='bgr8')
-            print("影像1 shape:", frame1.shape, "dtype:", frame1.dtype)
-            print("影像2 shape:", frame2.shape, "dtype:", frame2.dtype)
-        except Exception as e:
-            print("❌ cv_bridge 轉換失敗:", e)
-            return
+        self.try_show_combined()
+    # def image_callback(self, img_msg1, img_msg2):
+    #     # 轉為 OpenCV 格式
+    #     print("收到兩個影像訊息")
+    #     try:
+    #         frame1 = self.bridge.imgmsg_to_cv2(img_msg1, desired_encoding='bgr8')
+    #         frame2 = self.bridge.imgmsg_to_cv2(img_msg2, desired_encoding='bgr8')
+    #         print("影像1 shape:", frame1.shape, "dtype:", frame1.dtype)
+    #         print("影像2 shape:", frame2.shape, "dtype:", frame2.dtype)
+    #     except Exception as e:
+    #         print("❌ cv_bridge 轉換失敗:", e)
+    #         return
 
-        # 檢查尺寸是否一致
-        if frame1.shape != frame2.shape:
-            print(f"❗ frame1.shape={frame1.shape}, frame2.shape={frame2.shape}，無法合併")
-            return
+    #     # 檢查尺寸是否一致
+    #     if frame1.shape != frame2.shape:
+    #         print(f"❗ frame1.shape={frame1.shape}, frame2.shape={frame2.shape}，無法合併")
+    #         return
 
-        try:
-            combined = cv2.hconcat([frame1, frame2])
-            print("合併後影像 shape:", combined.shape)
-        except Exception as e:
-            print("❌ 合併影像失敗:", e)
-            return
-
+    #     try:
+    #         combined = cv2.hconcat([frame1, frame2])
+    #         print("合併後影像 shape:", combined.shape)
+    #     except Exception as e:
+    #         print("❌ 合併影像失敗:", e)
+    #         return
+    def try_show_combined(self):
+        if self.image1 is not None and self.image2 is not None:
+            if self.image1.shape == self.image2.shape:
+                combined = cv2.hconcat([self.image1, self.image2])
+                print("合併後影像 shape:", combined.shape)
+                cv2.imshow("Combined Aruco Frame", combined)
+                cv2.waitKey(1)
+            else:
+                print(f"❗ frame1.shape={self.image1.shape}, frame2.shape={self.image2.shape}，無法合併")
         # 後續處理
         cv2.imshow("Combined Aruco Frame", combined)
         cv2.waitKey(1)
