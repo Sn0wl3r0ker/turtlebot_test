@@ -20,6 +20,7 @@ class DualArucoMain(Node):
         self.sub1 = Subscriber(self, Image, '/camera1/image_raw')
         self.sub2 = Subscriber(self, Image, '/camera2/image_raw')
         self.ts = ApproximateTimeSynchronizer([self.sub1, self.sub2], queue_size=5, slop=0.1)
+        print(f"[INFO] before ts.registerCallback")
         self.ts.registerCallback(self.image_callback)
 
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_50)
