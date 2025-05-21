@@ -52,35 +52,19 @@ class DualArucoMain(Node):
             print("❌ camera2 cv_bridge 轉換失敗:", e)
             self.image2 = None
         self.try_show_combined()
-    # def image_callback(self, img_msg1, img_msg2):
-    #     # 轉為 OpenCV 格式
-    #     print("收到兩個影像訊息")
-    #     try:
-    #         frame1 = self.bridge.imgmsg_to_cv2(img_msg1, desired_encoding='bgr8')
-    #         frame2 = self.bridge.imgmsg_to_cv2(img_msg2, desired_encoding='bgr8')
-    #         print("影像1 shape:", frame1.shape, "dtype:", frame1.dtype)
-    #         print("影像2 shape:", frame2.shape, "dtype:", frame2.dtype)
-    #     except Exception as e:
-    #         print("❌ cv_bridge 轉換失敗:", e)
-    #         return
-
-    #     # 檢查尺寸是否一致
-    #     if frame1.shape != frame2.shape:
-    #         print(f"❗ frame1.shape={frame1.shape}, frame2.shape={frame2.shape}，無法合併")
-    #         return
-
-    #     try:
-    #         combined = cv2.hconcat([frame1, frame2])
-    #         print("合併後影像 shape:", combined.shape)
-    #     except Exception as e:
-    #         print("❌ 合併影像失敗:", e)
-    #         return
     def try_show_combined(self):
         if self.image1 is not None and self.image2 is not None:
             if self.image1.shape == self.image2.shape:
                 combined = cv2.hconcat([self.image1, self.image2])
                 print("合併後影像 shape:", combined.shape)
-                cv2.imshow("Combined Aruco Frame", combined)
+                # 進行 ArUco 偵測
+                gray = cv2.cvtColor(combined, cv2.COLOR_BGR2GRAY)
+                corners, ids, _ = aruco.detectMarkers(gray, self.aruco_dict, parameters=self.aruco_params)
+                # 將 frame, corners, ids 分別傳入兩個控制器處理
+                self.controller_id1.process(combined, corners, ids)
+                self.controller_id2.process(combined, corners, ids)
+                # 顯示畫面（包含目標點與追蹤點標示）
+                cv2.imshow("Aruco Shared Frame", combined)
                 cv2.waitKey(1)
             else:
                 print(f"❗ frame1.shape={self.image1.shape}, frame2.shape={self.image2.shape}，無法合併")
