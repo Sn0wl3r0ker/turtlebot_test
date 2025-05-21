@@ -27,20 +27,29 @@ class DualArucoMain(Node):
 
     def image_callback(self, img_msg1, img_msg2):
         # 轉為 OpenCV 格式
-        frame1 = self.bridge.imgmsg_to_cv2(img_msg1, desired_encoding='bgr8')
-        frame2 = self.bridge.imgmsg_to_cv2(img_msg2, desired_encoding='bgr8')
+        print("收到兩個影像訊息")
+        try:
+            frame1 = self.bridge.imgmsg_to_cv2(img_msg1, desired_encoding='bgr8')
+            frame2 = self.bridge.imgmsg_to_cv2(img_msg2, desired_encoding='bgr8')
+            print("影像1 shape:", frame1.shape, "dtype:", frame1.dtype)
+            print("影像2 shape:", frame2.shape, "dtype:", frame2.dtype)
+        except Exception as e:
+            print("❌ cv_bridge 轉換失敗:", e)
+            return
 
-        # 合併影像（橫向拼接）
-        combined = cv2.hconcat([frame1, frame2])  # 或 cv2.vconcat(...)
+        # 檢查尺寸是否一致
+        if frame1.shape != frame2.shape:
+            print(f"❗ frame1.shape={frame1.shape}, frame2.shape={frame2.shape}，無法合併")
+            return
 
-        # ArUco 偵測
-        gray = cv2.cvtColor(combined, cv2.COLOR_BGR2GRAY)
-        corners, ids, _ = aruco.detectMarkers(gray, self.aruco_dict, parameters=self.aruco_params)
+        try:
+            combined = cv2.hconcat([frame1, frame2])
+            print("合併後影像 shape:", combined.shape)
+        except Exception as e:
+            print("❌ 合併影像失敗:", e)
+            return
 
-        # 傳給兩個控制器
-        self.controller_id1.process(combined, corners, ids)
-        self.controller_id2.process(combined, corners, ids)
-
+        # 後續處理
         cv2.imshow("Combined Aruco Frame", combined)
         cv2.waitKey(1)
 
