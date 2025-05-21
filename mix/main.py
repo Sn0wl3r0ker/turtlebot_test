@@ -56,17 +56,14 @@ class DualArucoMain(Node):
         if self.image1 is not None and self.image2 is not None:
             if self.image1.shape == self.image2.shape:
                 combined = cv2.hconcat([self.image1, self.image2])
-                # 進行 ArUco 偵測
                 gray = cv2.cvtColor(combined, cv2.COLOR_BGR2GRAY)
                 corners, ids, _ = aruco.detectMarkers(gray, self.aruco_dict, parameters=self.aruco_params)
-                # 取得座標
-                id1_pos = self.controller_id1.process(combined, corners, ids)
-                id2_pos = self.controller_id2.process(combined, corners, ids)
-                # 印出 shape 與座標
+                width = self.image1.shape[1]
+                id1_pos = self.controller_id1.process(combined, corners, ids, offset_x=0)
+                id2_pos = self.controller_id2.process(combined, corners, ids, offset_x=width)
                 print(f"畫面 shape: {combined.shape}")
                 print(f"ID1 位置: {id1_pos}")
                 print(f"ID2 位置: {id2_pos}")
-                # 顯示畫面
                 cv2.imshow("Aruco Shared Frame", combined)
                 cv2.waitKey(1)
             else:

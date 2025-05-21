@@ -37,14 +37,15 @@ class ArucoPWMController:
         self.target_orientation = None
         self.stop_sent = False  # ✅ 加入對齊停止旗標
 
-    def process(self, frame, corners, ids):
+    def process(self, frame, corners, ids, offset_x=0):
         robot_pos, robot_orient, target_pos = None, None, None
 
         if ids is not None:
             for i, marker_id in enumerate(ids.flatten()):
                 rvec, tvec, _ = aruco.estimatePoseSingleMarkers(
                     corners[i], self.marker_length, self.camera_matrix, self.dist_coeffs)
-                tvec = tvec[0][0]
+                tvec = tvec[0][0].copy()
+                tvec[0] += offset_x  # x 座標加上 offset
                 rmat, _ = cv2.Rodrigues(rvec)
                 y_axis = rmat @ np.array([0, 1, 0])
                 theta = math.atan2(y_axis[0], y_axis[1])

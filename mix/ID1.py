@@ -56,7 +56,7 @@ class ArucoPIDController:
         y = (pixel_y - cy) * z_depth / fy
         return x, y, z_depth
 
-    def process(self, frame, corners, ids):
+    def process(self, frame, corners, ids, offset_x=0):
         robot_pos = None
         robot_orientation = None
 
@@ -65,7 +65,8 @@ class ArucoPIDController:
                 if marker_id == self.robot_id:
                     rvec, tvec, _ = aruco.estimatePoseSingleMarkers(
                         corners[i], self.marker_length, self.camera_matrix, self.dist_coeffs)
-                    tvec = tvec[0][0]
+                    tvec = tvec[0][0].copy()
+                    tvec[0] += offset_x  # x 座標加上 offset
                     rmat, _ = cv2.Rodrigues(rvec)
                     y_axis = rmat @ np.array([0, 1, 0])
                     theta = math.atan2(y_axis[0], y_axis[1])
